@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bulbu/api": "*",
     "@bulbu/engine": "*",
     "@number-flow/react": "0.5.10",
     "canvas-confetti": "1.9.3",

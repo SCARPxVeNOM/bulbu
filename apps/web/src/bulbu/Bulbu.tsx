@@ -17,7 +17,8 @@ export interface BulbuApi {
   /** give Bulbu a world (backdrop, props, fixed camera) or null for the plain surface colour */
   setStage(stage: unknown | null): void;
   glow: number;
-  outfit: "sweater" | "hoodie" | null;
+  /** "sweater", "hoodie", one of the eight Bulbu ids (shown once its 3D outfit exists), or null */
+  outfit: string | null;
   paused: boolean;
   interactive: boolean;
   autoRotate: boolean;
@@ -56,7 +57,7 @@ export interface BulbuProps {
   animation?: string;
   cue?: unknown;
   glow?: number;
-  outfit?: "sweater" | "hoodie" | null;
+  outfit?: string | null;
   /** what Bulbu says (speech bubble that follows the head) */
   line?: string | null;
   background?: string;

@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { fmtMinutes } from "@bulbu/engine";
-import { api, type Emote } from "../api";
+import { api, type Emote, type OutfitChoice } from "../api";
 import { Icon, Tile } from "../components/Icon";
 import { Header, Progress, Screen, Seg } from "../components/ui";
 import { useStore } from "../store";
 import { THEMES } from "../theme";
+
+// glyphs from the app's own icon set until each Bulbu's artwork lands
+const BULBU_ICON: Record<string, string> = { grad: "cap", fit: "dumbbell", cozy: "book", champ: "trophy", tech: "code", nature: "sun", dream: "target", party: "sparkles" };
 
 const EMOTES: [Emote, string][] = [["happy", "Happy"], ["drained", "Sleepy"], ["focused", "Focused"], ["thriving", "Excited"], ["celebrating", "Celebrating"], ["stressed", "Stressed"]];
 
@@ -18,10 +21,14 @@ export function Profile() {
   const s = state, u = s.user;
   const hoodieEarned = s.achievements.find(a => a.id === "streak7")?.earned ?? false;
   const setUser = async (b: Parameters<typeof api.updateUser>[0]) => { await api.updateUser(b); refresh(); };
-  const outfits: { id: "sweater" | "hoodie" | null; label: string; locked?: string }[] = [
+  const outfits: { id: OutfitChoice; label: string; locked?: string }[] = [
     { id: "sweater", label: "Cosy sweater" }, { id: "hoodie", label: "Star hoodie", locked: hoodieEarned ? undefined : "7-day streak" }, { id: null, label: "No outfit" },
   ];
   const earned = s.achievements.filter(a => a.earned).length;
+  const bulbus = s.outfits ?? [];
+  const wear = async (id: OutfitChoice) => {
+    try { await api.equip(id); await refresh(); } catch (e) { toast((e as Error).message); }
+  };
 
   return (
     <Screen tabs>
@@ -45,6 +52,21 @@ export function Profile() {
             </button>
           ))}</div>
         </section>
+        {bulbus.length > 0 && <section>
+          <div className="card-head"><span className="card-title">The eight Bulbus</span><span className="muted small">{bulbus.filter(b => b.unlocked).length}/{bulbus.length} earned</span></div>
+          <div className="card list">{bulbus.map(b => (
+            <div key={b.id} className="li" style={{ alignItems: "flex-start" }}>
+              <Tile icon={BULBU_ICON[b.id]} color="#3D5BFF" size={38} />
+              <span className="grow" style={{ minWidth: 0 }}>
+                <b>{b.name}</b><br /><span className="muted small">{b.tagline}</span>
+                {!b.unlocked && <span style={{ display: "block", marginTop: 6 }}><Progress value={b.progress * 100} height={12} label={`${b.name} progress`} /><span className="muted tiny">{b.unlock} · {b.detail}</span></span>}
+              </span>
+              {b.unlocked
+                ? <button className={u.outfit === b.id ? "btn ghost sm" : "btn sm"} aria-pressed={u.outfit === b.id} onClick={() => wear(u.outfit === b.id ? null : b.id)}>{u.outfit === b.id ? "Wearing" : "Wear"}</button>
+                : <Icon name="lock" size={16} />}
+            </div>
+          ))}</div>
+        </section>}
         <section>
           <div className="card-head"><span className="card-title">Expressions</span></div>
           <div className="thumbs">{EMOTES.map(([e, l]) => (

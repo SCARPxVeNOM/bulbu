@@ -1,0 +1,12 @@
+{
+  "name": "@bulbu/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Typed client for the Bulbu server. No DOM or Node APIs beyond fetch, so it runs in the web app and in React Native.",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@bulbu/engine": "*" },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\""
+  }
+}

@@ -8,7 +8,7 @@
     "build": "npm run build -w @bulbu/web",
     "start": "npm run start -w @bulbu/server",
     "seed": "npm run seed -w @bulbu/server",
-    "test": "npm test -w @bulbu/engine && npm test -w @bulbu/server",
+    "test": "npm test -w @bulbu/engine && npm test -w @bulbu/api && npm test -w @bulbu/server",
     "typecheck": "tsc -p tsconfig.json --noEmit && npm run typecheck -w @bulbu/web"
   },
   "devDependencies": {

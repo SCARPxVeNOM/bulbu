@@ -7,6 +7,7 @@ const cfg = {
   key: process.env.META_API_KEY ?? "",
   spark: process.env.MUSE_SPARK_MODEL ?? "muse-spark-1.3",
   wonder: process.env.MUSE_WONDER_MODEL ?? "muse-wonder-1.0",
+  voice: process.env.MUSE_VOICE_MODEL ?? "muse-voice-transcribe-1.0",
 };
 export const ai = { enabled: !!(cfg.base && cfg.key), models: { spark: cfg.spark, wonder: cfg.wonder } };
 
@@ -69,6 +70,43 @@ export async function complete(o: { model?: "spark" | "wonder"; messages: Msg[];
   const msg = await call(ask(false), label);
   if (forced && !msg.tool_calls?.length) return call(ask(true), `${label} (retry)`);
   return msg;
+}
+
+/** Read a WAV header so we can reject audio Meta won't accept before spending a call on it. */
+export function wavInfo(b: Uint8Array): { channels: number; sampleRate: number; bits: number; seconds: number } | null {
+  if (b.length < 44) return null;
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength), str = (o: number) => String.fromCharCode(...b.subarray(o, o + 4));
+  if (str(0) !== "RIFF" || str(8) !== "WAVE") return null;
+  let o = 12, fmt: { channels: number; sampleRate: number; bits: number } | null = null, data = 0;
+  while (o + 8 <= b.length) {
+    const id = str(o), size = dv.getUint32(o + 4, true);
+    if (id === "fmt ") fmt = { channels: dv.getUint16(o + 10, true), sampleRate: dv.getUint32(o + 12, true), bits: dv.getUint16(o + 22, true) };
+    if (id === "data") { data = size; break; }
+    o += 8 + size + (size % 2);
+  }
+  if (!fmt) return null;
+  return { ...fmt, seconds: data / Math.max(1, fmt.sampleRate * fmt.channels * (fmt.bits / 8)) };
+}
+
+/** Muse Voice Transcribe: mono 16-bit PCM WAV at 16 or 24 kHz, up to 10 minutes. Language is auto-detected. */
+export async function transcribe(wav: Uint8Array, o: { keywords?: string[] } = {}): Promise<{ transcript: string; durationMs: number }> {
+  if (!ai.enabled) throw new Error("No model configured (set META_API_BASE_URL and META_API_KEY)");
+  const info = wavInfo(wav);
+  if (!info) throw Object.assign(new Error("Send a WAV file (RIFF/WAVE)."), { status: 400 });
+  if (info.channels !== 1 || info.bits !== 16 || ![16000, 24000].includes(info.sampleRate))
+    throw Object.assign(new Error(`Audio must be mono 16-bit PCM WAV at 16 or 24 kHz (got ${info.channels} ch, ${info.bits}-bit, ${info.sampleRate} Hz).`), { status: 400 });
+  if (info.seconds > 600) throw Object.assign(new Error("Audio must be 10 minutes or shorter."), { status: 400 });
+  const form = new FormData();
+  form.append("request", new Blob([JSON.stringify({ model: cfg.voice, audioEncoding: "WAV", ...(o.keywords?.length && { keywords: o.keywords }) })], { type: "application/json" }));
+  form.append("audio", new Blob([wav], { type: "audio/wav" }), "audio.wav");
+  const res = await fetch(`${cfg.base}/asr/transcribe`, { method: "POST", headers: { authorization: `Bearer ${cfg.key}` }, body: form, signal: AbortSignal.timeout(60_000) });
+  if (!res.ok) throw new Error(`Voice API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const j = await res.json() as { transcript?: string; audioDurationMs?: number; turns?: { transcript?: string }[] };
+  const durationMs = j.audioDurationMs ?? Math.round(info.seconds * 1000);
+  const cost = durationMs / 3_600_000 * 0.18;
+  spent += cost;
+  console.log(`[meta] transcribe ${cfg.voice} ${(durationMs / 1000).toFixed(1)}s ≈ $${cost.toFixed(5)} · session total $${spent.toFixed(4)}`);
+  return { transcript: (j.transcript ?? j.turns?.map(t => t.transcript).join(" ") ?? "").trim(), durationMs };
 }
 
 export const args = <T>(c: ToolCall): T => { try { return JSON.parse(c.function.arguments || "{}") as T; } catch { return {} as T; } };

@@ -1,6 +1,6 @@
 // What the app does: snapshot, log, chat, what-if, reflect, nudges. Engine for numbers, models for words and Bulbu's body.
 import {
-  achievements, addDays, allImpacts, costGoal, dayKey, fmtDays, fmtMinutes, fmtMoney, forecast, glowFor, impactsOf, insights,
+  achievements, addDays, allImpacts, classifyApp, costGoal, newlyUnlocked, outfitById, outfitStates, dayKey, fmtDays, fmtMinutes, fmtMoney, forecast, glowFor, impactsOf, insights,
   level, patterns, progressSeries, reactionFor, simulate, streak, swapFor, typicalOrder,
   type Activity, type Category, type Change, type Emote, type Forecast, type Goal, type Impact, type WhatIf,
 } from "@bulbu/engine";
@@ -45,6 +45,7 @@ export function snapshot(userId: string, now = new Date()) {
     user, goals: goalViews, today: todayActs, streak: streak(acts, now), level: level(acts),
     week, glow, emote, patterns: patterns(acts, now), facts,
     nudges: nudges(user, goals, acts, facts, now), achievements: achievements(goals, acts, now),
+    outfits: outfitStates(goals, acts, now), letter: user.letter ?? null,
     ai: { enabled: ai.enabled, models: ai.models }, now: now.toISOString(),
   };
 }
@@ -68,15 +69,18 @@ const LINES: Record<Emote, string[]> = {
   celebrating: ["WE DID IT! Goal complete!", "You actually did it! Celebration time!"],
 };
 const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
+/** When Bulbu wears one of the eight outfits, Spark gets a hint so it sounds a little like that Bulbu. */
+const outfitVoice = (user: User) => { const o = outfitById(user.outfit); return o ? `\nToday you are ${o.name}: still Bulbu, but sound like ${o.voice}.` : ""; };
 
-async function parseWithSpark(input: LogInput, goals: Goal[], now: Date) {
+async function parseWithSpark(input: LogInput, goals: Goal[], now: Date, overrides?: User["appKinds"]) {
   const content: Part[] = [];
   if (input.text) content.push({ type: "text", text: input.text });
   if (input.image) content.push({ type: "text", text: "Read this image (screen-time screenshot, receipt, meal, or workout screen) into activities." }, { type: "image_url", image_url: { url: input.image } });
   const msg = await complete({
     messages: [
       { role: "system", content: `Turn the user's day into activities. Now: ${now.toString()}. Goals: ${goals.map(g => `${g.title} (${g.template})`).join(", ")}.
-Rules: screen time is per app (label "2h on Instagram", never "Reels" unless the user said Reels). "Skipped X" is not an activity: list it in skipped. Don't guess durations or prices you cannot see or infer; ask instead. For screen-time screenshots, log one social_media activity per app over 10 minutes. Put money in rupees.` },
+Rules: screen time is per app (label "2h on Instagram", never "Reels" unless the user said Reels). "Skipped X" is not an activity: list it in skipped. Don't guess durations or prices you cannot see or infer; ask instead. Put money in rupees.
+Screen time: only distracting apps (social media, video, games) are social_media. Study, coding, reading and fitness apps use study, code, read or workout. Do NOT log phone, messaging, email, calendar, clock, maps, files, payment, banking, crypto, shopping or delivery apps at all. Always set "app" for screen time. Never log screen time without minutes you can actually see: if the screenshot shows only a total, log nothing for those apps and ask for the per-app minutes (e.g. "Open App activity details and share that screen").` },
       { role: "user", content },
     ],
     tools: [LOG_ACTIVITIES], toolChoice: "log_activities",
@@ -84,12 +88,27 @@ Rules: screen time is per app (label "2h on Instagram", never "Reels" unless the
   const call = msg.tool_calls?.[0];
   if (!call) throw new Error("Spark did not return activities");
   const a = args<{ activities: (Partial<Activity> & { alternative_cost?: number; hours_ago?: number })[]; questions?: string[] }>(call);
+  const questions = [...(a.questions ?? [])];
+  // screen time is checked against the app list: neutral apps are dropped, study/code/read apps re-filed,
+  // and screen time without minutes is never stored (we ask instead)
+  const kept: typeof a.activities = [];
+  let missingMinutes = false;
+  for (const x of a.activities ?? []) {
+    if (x.app) {
+      const info = classifyApp(x.app, undefined, overrides);
+      if (info.kind === "neutral" || !info.category) continue;
+      if (!x.minutes || x.minutes <= 0) { missingMinutes = true; continue; }
+      kept.push({ ...x, category: info.category, label: `${fmtMinutes(x.minutes)} on ${info.name}` });
+    } else kept.push(x);
+  }
+  if (missingMinutes && !questions.some(q => /minute|how long|activity details/i.test(q)))
+    questions.push("How many minutes did you spend on each app? The App activity details screen shows the minutes per app.");
   return {
-    activities: (a.activities ?? []).map(x => ({
+    activities: kept.map(x => ({
       category: x.category ?? "other", label: x.label ?? "Activity", minutes: x.minutes, amount: x.amount, units: x.units, app: x.app,
       alternativeCost: x.alternative_cost, at: new Date(+now - (x.hours_ago ?? 0) * 3600_000).toISOString(),
     })) as Omit<Activity, "id" | "source">[],
-    questions: a.questions ?? [],
+    questions: questions.slice(0, 2),
   };
 }
 
@@ -99,7 +118,7 @@ async function reactWithSpark(user: User, impacts: Impact[], acts: Activity[], f
     const msg = await complete({
       maxTokens: 200, tools: [SET_BULBU], toolChoice: "set_bulbu",
       messages: [
-        { role: "system", content: PERSONA },
+        { role: "system", content: PERSONA + outfitVoice(user) },
         { role: "user", content: `${user.name} just logged: ${acts.map(a => a.label).join("; ")}.
 Engine results (exact, do not change the numbers): ${impacts.map(i => `${i.goalTitle}: ${fmtDays(i.days)} (${i.equivalent})`).join("; ") || "no goal impact"}.
 Suggested reaction: ${fallback.emote}. React through Bulbu's body with set_bulbu.` },
@@ -118,7 +137,7 @@ export async function log(userId: string, input: LogInput, now = new Date()) {
   if (input.quick) {
     parsed = { activities: [{ ...quickActivity(input.quick.category, input.quick, now), goalId: input.quick.goalId }], questions: [] };
   } else if (ai.enabled) {
-    try { parsed = await parseWithSpark(input, goals, now); via = "spark"; }
+    try { parsed = await parseWithSpark(input, goals, now, user.appKinds); via = "spark"; }
     catch (e) { console.warn("[spark] parse failed:", (e as Error).message); if (!input.text) throw e; parsed = parseText(input.text, goals, history, now); via = "offline"; }
   } else if (input.text) {
     parsed = parseText(input.text, goals, history, now); via = "offline";
@@ -147,7 +166,8 @@ export async function log(userId: string, input: LogInput, now = new Date()) {
   const fallback: BulbuDirective = { ...r, glow, via: "engine", line: pick(LINES[r.emote]).replace("{days}", fmtDays(net).replace("-", "")) };
   const bulbu = await reactWithSpark(user, impacts, added, fallback);
   store.putUser({ ...user, mood: { emote: bulbu.emote, at: now.toISOString() } });
-  return { activities: added, impacts, swap, questions: parsed.questions, forecasts, completed, bulbu, via };
+  const unlocked = newlyUnlocked(goals, history, after, now);
+  return { activities: added, impacts, swap, questions: parsed.questions, forecasts, completed, bulbu, via, unlocked };
 }
 
 // ------------------------------------------------------------------ what-if
@@ -237,7 +257,7 @@ async function chatWithSpark(user: User, text: string, now: Date, out: ChatOut) 
   const facts = store.facts(user.id).filter(f => f.confidence >= 0.5).map(f => `- [${f.kind}] ${f.text}`).join("\n");
   const history = store.messages(user.id, 13).slice(0, -1).map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
   const messages: Msg[] = [
-    { role: "system", content: `${PERSONA}\n\nUser: ${user.name}. Now: ${now.toString()}.\nWhat you remember:\n${facts}\nEngine snapshot: ${JSON.stringify(goalsSummary(user.id, now))}` },
+    { role: "system", content: `${PERSONA}${outfitVoice(user)}\n\nUser: ${user.name}. Now: ${now.toString()}.\nWhat you remember:\n${facts}\nEngine snapshot: ${JSON.stringify(goalsSummary(user.id, now))}` },
     ...history, { role: "user", content: text },
   ];
   for (let round = 0; round < 4; round++) {
@@ -343,6 +363,8 @@ Return JSON: {"facts":[{"text":"...","confidence":0-1}] (new things about the us
       letter = j.letter ?? null; via = "wonder";
     } catch (e) { console.warn("[wonder] reflection failed:", (e as Error).message); }
   }
+  const u = store.user(userId);
+  if (u) store.putUser({ ...u, reflectedAt: iso, ...(letter && { letter: { text: letter, at: iso } }) });
   return { patterns: found, facts: store.facts(userId), letter, via };
 }
 

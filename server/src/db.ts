@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Activity, Goal } from "@bulbu/engine";
+import type { Activity, AppKind, Goal } from "@bulbu/engine";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const file = process.env.BULBU_DB ?? path.resolve(here, "../data/bulbu.db");
@@ -21,7 +21,13 @@ db.exec(`
 
 export interface User {
   id: string; name: string; createdAt: string; demo?: boolean;
-  outfit: "sweater" | "hoodie" | null; theme: string;
+  /** "sweater" | "hoodie" (built-in), one of the eight Bulbu outfit ids, or null */
+  outfit: string | null; theme: string;
+  /** the user's own app classifications, keyed by lower-case app name */
+  appKinds?: Record<string, AppKind>;
+  /** last nightly reflection, and the note from it */
+  reflectedAt?: string;
+  letter?: { text: string; at: string };
   /** the last reaction, so Bulbu looks the same when the app reopens */
   mood?: { emote: string; at: string };
   /** nudge kinds the user dismissed, so Bulbu sends fewer of them */

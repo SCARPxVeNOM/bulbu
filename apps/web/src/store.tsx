@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { outfitById } from "@bulbu/engine";
 import { api, session, type BulbuDirective, type LogResult, type Snapshot } from "./api";
 
 interface Store {
@@ -53,11 +54,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const toast = useCallback((text: string) => { setToast(text); setTimeout(() => setToast(t => t === text ? null : t), 2600); }, []);
 
+  // every log goes through here, so a newly earned Bulbu is always announced
+  const recordLog = useCallback((r: LogResult | null) => {
+    setLastLog(r);
+    const names = (r?.unlocked ?? []).map(id => outfitById(id)?.name).filter(Boolean);
+    if (names.length) toast(`You unlocked ${names.join(" and ")}! Wear it from your profile.`);
+  }, [toast]);
+
   const value = useMemo<Store>(() => ({
-    userId, state, loading, error, refresh, reaction, setReaction, lastLog, setLastLog, toast, toastText,
+    userId, state, loading, error, refresh, reaction, setReaction, lastLog, setLastLog: recordLog, toast, toastText,
     signIn: (id: string) => { session.set(id); setUserId(id); setReaction(null); setLastLog(null); },
     signOut: () => { session.set(null); setUserId(null); setState(null); setReaction(null); },
-  }), [userId, state, loading, error, refresh, reaction, lastLog, toast, toastText]);
+  }), [userId, state, loading, error, refresh, reaction, lastLog, recordLog, toast, toastText]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
