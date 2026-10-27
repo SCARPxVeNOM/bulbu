@@ -5,8 +5,8 @@
 const cfg = {
   base: (process.env.META_API_BASE_URL ?? "").replace(/\/$/, ""),
   key: process.env.META_API_KEY ?? "",
-  spark: process.env.MUSE_SPARK_MODEL ?? "muse-spark",
-  wonder: process.env.MUSE_WONDER_MODEL ?? "muse-wonder",
+  spark: process.env.MUSE_SPARK_MODEL ?? "muse-spark-1.3",
+  wonder: process.env.MUSE_WONDER_MODEL ?? "muse-wonder-1.0",
 };
 export const ai = { enabled: !!(cfg.base && cfg.key), models: { spark: cfg.spark, wonder: cfg.wonder } };
 
@@ -18,18 +18,57 @@ export type Msg =
 export interface ToolCall { id: string; type: "function"; function: { name: string; arguments: string } }
 export interface Tool { type: "function"; function: { name: string; description: string; parameters: object } }
 
-export async function complete(o: { model?: "spark" | "wonder"; messages: Msg[]; tools?: Tool[]; toolChoice?: string; maxTokens?: number; json?: boolean }) {
+// $ per 1M tokens (dev.meta.ai pricing): [input, cached input, output]
+const PRICE: Record<string, [number, number, number]> = {
+  "muse-spark": [1.25, 0.15, 4.25], "muse-spark-contributor": [0.10, 0.002, 0.20], "muse-wonder": [4, 0.20, 20],
+};
+const priceFor = (model: string) => PRICE[model.includes("contributor") ? "muse-spark-contributor" : model.startsWith("muse-wonder") ? "muse-wonder" : "muse-spark"];
+let spent = 0;
+type Usage = { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; completion_tokens_details?: { reasoning_tokens?: number } };
+/** One line per call so we always know where the credits go (the billing page can lag by an hour). */
+function logUsage(model: string, u: Usage | undefined, label: string) {
+  const inTok = u?.prompt_tokens ?? 0, outTok = u?.completion_tokens ?? 0, cached = u?.prompt_tokens_details?.cached_tokens ?? 0;
+  const [pin, pcache, pout] = priceFor(model);
+  const cost = ((inTok - cached) * pin + cached * pcache + outTok * pout) / 1e6;
+  spent += cost;
+  console.log(`[meta] ${label} ${model} in=${inTok} (cached ${cached}) out=${outTok} (reasoning ${u?.completion_tokens_details?.reasoning_tokens ?? 0}) ≈ $${cost.toFixed(5)} · session total $${spent.toFixed(4)}`);
+}
+
+export type Effort = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+// On Meta's API max_tokens caps hidden reasoning + visible output together, so every call gets reasoning headroom.
+const REASONING_HEADROOM: Record<Effort, number> = { minimal: 1000, low: 3000, medium: 6000, high: 12000, xhigh: 20000, max: 32000 };
+
+export async function complete(o: { model?: "spark" | "wonder"; messages: Msg[]; tools?: Tool[]; toolChoice?: string; maxTokens?: number; json?: boolean; effort?: Effort }) {
   if (!ai.enabled) throw new Error("No model configured (set META_API_BASE_URL and META_API_KEY)");
-  const body: Record<string, unknown> = { model: cfg[o.model ?? "spark"], messages: o.messages, max_tokens: o.maxTokens ?? 800, temperature: 0.6 };
-  if (o.tools) { body.tools = o.tools; body.tool_choice = o.toolChoice ? { type: "function", function: { name: o.toolChoice } } : "auto"; }
-  if (o.json) body.response_format = { type: "json_object" };
-  const res = await fetch(`${cfg.base}/chat/completions`, {
-    method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${cfg.key}` },
-    body: JSON.stringify(body), signal: AbortSignal.timeout(45_000),
-  });
-  if (!res.ok) throw new Error(`Model API ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  const data = await res.json() as { choices: { message: { content: string | null; tool_calls?: ToolCall[] } }[] };
-  return data.choices[0].message;
+  const model = cfg[o.model ?? "spark"];
+  const effort: Effort = o.effort ?? (o.model === "wonder" ? "medium" : "low");
+  // Meta's API only accepts tool_choice "auto". To "force" a tool we offer only that tool and ask for it explicitly,
+  // then retry once with a firmer instruction if the model answered in plain text.
+  const forced = o.toolChoice && o.tools?.find(t => t.function.name === o.toolChoice);
+  const tools = forced ? [forced] : o.tools;
+  const ask = (firm: boolean): Msg[] => forced
+    ? [...o.messages, { role: "system", content: firm
+        ? `Respond ONLY with a call to the ${forced.function.name} tool. Do not write any text.`
+        : `Respond by calling the ${forced.function.name} tool.` }]
+    : o.messages;
+  const call = async (messages: Msg[], label: string) => {
+    const body: Record<string, unknown> = { model, messages, max_tokens: (o.maxTokens ?? 800) + REASONING_HEADROOM[effort], reasoning_effort: effort, temperature: 0.6 };
+    if (tools) { body.tools = tools; body.tool_choice = "auto"; }
+    if (o.json) body.response_format = { type: "json_object" };
+    const res = await fetch(`${cfg.base}/chat/completions`, {
+      method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${cfg.key}` },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(45_000),
+    });
+    if (!res.ok) throw new Error(`Model API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    const data = await res.json() as { choices: { message: { content: string | null; tool_calls?: ToolCall[] }; finish_reason?: string }[]; usage?: Usage };
+    if (data.choices[0]?.finish_reason === "length") console.warn(`[meta] ${label}: hit max_tokens (reasoning used ${data.usage?.completion_tokens_details?.reasoning_tokens ?? "?"} tokens)`);
+    logUsage(model, data.usage, label);
+    return data.choices[0].message;
+  };
+  const label = o.toolChoice ?? (o.tools ? "chat" : "text");
+  const msg = await call(ask(false), label);
+  if (forced && !msg.tool_calls?.length) return call(ask(true), `${label} (retry)`);
+  return msg;
 }
 
 export const args = <T>(c: ToolCall): T => { try { return JSON.parse(c.function.arguments || "{}") as T; } catch { return {} as T; } };
