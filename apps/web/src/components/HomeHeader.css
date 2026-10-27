@@ -1,0 +1,21 @@
+/* HomeHeader — bleeds to the screen edges; colours: #FAFBFF / #EAF2FF / #EAE8FF bg, #172451 text, #405BFF primary, #5BE0FF cyan, #8B6CFF violet. */
+.hh { position: relative; margin: calc(-1 * max(14px, env(safe-area-inset-top))) -18px -6px; padding: max(18px, calc(env(safe-area-inset-top) + 10px)) 18px 30px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent 100%); mask-image: linear-gradient(180deg, #000 72%, transparent 100%);
+  background: radial-gradient(60% 90% at 10% 30%, rgba(91, 224, 255, .16) 0%, transparent 70%), linear-gradient(180deg, #FAFBFF 0%, #EEF4FF 55%, rgba(234, 242, 255, 0) 100%); }
+.hh-waves { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.hh-spark { position: absolute; pointer-events: none; opacity: .9; filter: drop-shadow(0 0 3px rgba(139, 108, 255, .35)); }
+.hh-row { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.hh-text { min-width: 0; display: grid; gap: 2px; }
+.hh-word { display: block; width: clamp(150px, 46vw, 196px); height: auto; overflow: visible; margin-left: -8px; }
+.hh-greet { margin-top: 0; font-size: 15px; font-weight: 500; color: #60739F; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hh-actions { display: flex; align-items: center; gap: 10px; flex: none; }
+.hh-bell { position: relative; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; color: #405BFF;
+  background: radial-gradient(80% 60% at 50% 15%, rgba(255, 255, 255, .98), rgba(255, 255, 255, .7));
+  box-shadow: inset 0 1.5px 0 #fff, inset 0 0 0 1px rgba(255, 255, 255, .9), 0 0 0 4px rgba(67, 217, 255, .12), 0 8px 18px rgba(64, 91, 255, .18), 0 0 18px rgba(67, 217, 255, .2), 0 0 26px rgba(128, 89, 255, .12);
+  transition: transform .15s; }
+.hh-bell:active { transform: scale(.94); }
+.hh-badge { position: absolute; top: 9px; right: 10px; width: 10px; height: 10px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff 0 14%, #FF6A84 30%, #FF4668 70%); box-shadow: 0 0 0 2px #fff, 0 2px 5px rgba(255, 70, 104, .45); }
+.hh-avatar { width: 48px; height: 48px; border-radius: 50%; overflow: hidden; display: block; flex: none;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .9), 0 0 0 4px rgba(200, 210, 255, .5), 0 8px 18px rgba(128, 89, 255, .22), 0 0 18px rgba(67, 217, 255, .18); transition: transform .15s; }
+.hh-avatar:active { transform: scale(.94); }

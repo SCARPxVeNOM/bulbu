@@ -1,0 +1,77 @@
+/* BottomNav — floating liquid-glass capsule. Palette: #405BFF primary, #39D9FF cyan, #7857FF violet, #929DC0 muted, #172451 text. */
+.bnav {
+  position: fixed; z-index: 20; left: 50%; transform: translateX(-50%);
+  bottom: max(10px, env(safe-area-inset-bottom)); width: calc(100% - 24px); max-width: 436px;
+  pointer-events: none; /* only the bar itself takes taps */
+}
+.bnav-bar {
+  pointer-events: auto; position: relative; height: 72px; padding: 0 6px;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: stretch;
+  border-radius: 30px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFF 55%, #EDEFFF 100%);
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 1), inset 0 -1px 0 rgba(214, 220, 255, .7),
+              0 18px 36px -14px rgba(64, 91, 255, .38), 0 4px 14px rgba(120, 87, 255, .08);
+}
+/* the raised shoulder around the orb — same surface colour as the top of the bar */
+.bnav-hump { position: absolute; left: 50%; top: -27px; width: 168px; height: 30px; transform: translateX(-50%); overflow: visible;
+  filter: drop-shadow(0 -6px 10px rgba(64, 91, 255, .10)); }
+.bnav-hump path { fill: #FFFFFF; }
+/* restrained liquid contour along the lower edge, clipped to the capsule */
+.bnav-contour { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 22px; border-radius: 0 0 30px 30px; pointer-events: none; }
+.bnav-contour path { fill: rgba(196, 204, 255, .28); }
+
+.bnav-slot { position: relative; display: grid; place-items: center; }
+.bnav-tab { position: relative; display: grid; place-items: center; color: #929DC0; text-decoration: none; margin: 7px 2px; border-radius: 22px; overflow: hidden; isolation: isolate; }
+.bnav-tab-in { position: relative; z-index: 1; display: grid; justify-items: center; gap: 3px; }
+.bnav-ico { display: grid; place-items: center; height: 30px; transition: color .25s; }
+.bnav-label { font-size: 11.5px; font-weight: 600; letter-spacing: .01em; transition: color .25s; }
+.bnav-tab.on { color: #405BFF; }
+.bnav-tab.on .bnav-label { font-weight: 700; }
+.bnav-tab:not(.on):hover { color: #7480AE; }
+.bnav-tab:focus-visible { outline: 2.5px solid #405BFF; outline-offset: -2px; }
+
+/* active jelly bubble — organic but controlled, entirely inside its own tab cell */
+.bnav-bubble {
+  position: absolute; inset: 0; z-index: 0;
+  border-radius: 46% 54% 42% 58% / 56% 48% 52% 44%;
+  background:
+    radial-gradient(60% 45% at 38% 26%, rgba(255, 255, 255, .85) 0%, rgba(255, 255, 255, 0) 70%),
+    radial-gradient(90% 90% at 45% 40%, rgba(57, 217, 255, .42) 0%, rgba(64, 140, 255, .24) 55%, rgba(120, 87, 255, .14) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), inset 0 -6px 12px rgba(64, 91, 255, .14), inset 0 0 0 1px rgba(255, 255, 255, .55);
+  animation: bnav-breathe 5.5s ease-in-out infinite;
+}
+.bnav-bubble i { position: absolute; border-radius: 50%; background: radial-gradient(circle at 35% 35%, rgba(255,255,255,.95), rgba(255,255,255,.25) 60%, rgba(255,255,255,.05)); box-shadow: inset 0 0 0 .6px rgba(255,255,255,.7); }
+.bnav-bubble .b1 { width: 9px; height: 9px; right: 18%; top: 14%; }
+.bnav-bubble .b2 { width: 4px; height: 4px; left: 17%; top: 46%; background: rgba(57, 160, 255, .55); }
+.bnav-bubble .b3 { width: 3px; height: 3px; right: 22%; bottom: 26%; background: rgba(64, 91, 255, .45); }
+@keyframes bnav-breathe { 0%, 100% { filter: saturate(1) brightness(1); } 50% { filter: saturate(1.12) brightness(1.03); } }
+
+/* center orb */
+.bnav-orb {
+  position: absolute; left: 50%; top: -24px; transform: translateX(-50%);
+  width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; color: #0F4D33; overflow: hidden; isolation: isolate;
+  background:
+    radial-gradient(70% 60% at 30% 22%, rgba(214, 255, 232, .95) 0%, rgba(214, 255, 232, 0) 60%),
+    radial-gradient(80% 80% at 78% 82%, rgba(72, 196, 132, .9) 0%, rgba(72, 196, 132, 0) 60%),
+    radial-gradient(circle at 50% 50%, #9BEDC0 0%, #7FE2AC 55%, #5FD195 100%);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .6), inset 0 -8px 16px rgba(30, 130, 80, .25), inset 0 6px 12px rgba(235, 255, 244, .5),
+              0 10px 22px rgba(46, 180, 110, .38), 0 0 18px rgba(120, 230, 170, .3);
+  transition: transform .2s cubic-bezier(.3, 1.5, .5, 1);
+}
+.bnav-orb:active { transform: translateX(-50%) scale(.93); }
+.bnav-orb:focus-visible { outline: 3px solid #4CC98A; outline-offset: 3px; }
+.bnav-orb svg { position: relative; z-index: 2; filter: drop-shadow(0 1px 0 rgba(255, 255, 255, .5)); }
+.bnav-orb-flow { /* restrained flowing gradient inside the orb */
+  position: absolute; inset: -30%; z-index: 0; border-radius: 50%; opacity: .45; mix-blend-mode: soft-light;
+  background: conic-gradient(from 0deg, rgba(200,255,225,.9), rgba(110,219,160,0) 30%, rgba(60,190,125,.8) 55%, rgba(110,219,160,0) 80%, rgba(200,255,225,.9));
+  animation: bnav-flow 9s linear infinite;
+}
+.bnav-orb-gloss { /* glass reflections: a soft top-left sheet + a lower-right crescent */
+  position: absolute; inset: 0; z-index: 1; border-radius: 50%; pointer-events: none;
+  background:
+    radial-gradient(42% 26% at 34% 20%, rgba(255, 255, 255, .7) 0%, rgba(255, 255, 255, 0) 100%),
+    radial-gradient(30% 22% at 76% 80%, rgba(225, 255, 238, .55) 0%, rgba(225, 255, 238, 0) 100%);
+}
+@keyframes bnav-flow { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) { .bnav-bubble, .bnav-orb-flow { animation: none; } .bnav-orb { transition: none; } }

@@ -1,0 +1,303 @@
+{
+ "happy": {
+  "center": "#e8cf44",
+  "edge": "#e5be81",
+  "rainbow": null,
+  "viewCenter": "#f9e59b",
+  "viewEdge": "#f4d9b4",
+  "viewRainbow": null,
+  "filament": "#FFF7A8",
+  "filamentPower": 1.0,
+  "halo": "#ffde8c",
+  "haloPower": 0.9,
+  "eyes": "open",
+  "hearts": true,
+  "eyeKeys": {},
+  "mouth": {},
+  "filamentShape": null,
+  "parts": [],
+  "live": {
+   "center": [
+    1.0151,
+    0.5802,
+    0.0901
+   ],
+   "edge": [
+    1.042,
+    0.8839,
+    0.3869
+   ]
+  }
+ },
+ "focused": {
+  "center": "#93bfea",
+  "edge": "#9cb3ea",
+  "rainbow": null,
+  "viewCenter": "#bbd6fa",
+  "viewEdge": "#c3d3f8",
+  "viewRainbow": null,
+  "filament": "#e1f5ff",
+  "filamentPower": 1.1,
+  "halo": "#b9cdff",
+  "haloPower": 0.85,
+  "eyes": "open",
+  "hearts": true,
+  "eyeKeys": {},
+  "mouth": {
+   "Small": 1
+  },
+  "filamentShape": "Fil_Focus",
+  "parts": [
+   "Brows_Focused"
+  ],
+  "live": {
+   "center": [
+    0.2841,
+    0.5432,
+    0.9648
+   ],
+   "edge": [
+    0.4507,
+    0.5587,
+    0.9149
+   ]
+  }
+ },
+ "drained": {
+  "center": "#c7a35f",
+  "edge": "#8b768b",
+  "rainbow": null,
+  "viewCenter": "#d7bca1",
+  "viewEdge": "#b7a9b4",
+  "viewRainbow": null,
+  "filament": "#f0cd8c",
+  "filamentPower": 0.8,
+  "halo": "#d2c3be",
+  "haloPower": 0.35,
+  "eyes": "open",
+  "hearts": true,
+  "eyeKeys": {
+   "Sleepy": 1
+  },
+  "mouth": {
+   "Frown": 1
+  },
+  "filamentShape": "Fil_Drained",
+  "parts": [
+   "Brows_Drained"
+  ],
+  "live": {
+   "center": [
+    0.6787,
+    0.3958,
+    0.1621
+   ],
+   "edge": [
+    0.3369,
+    0.3083,
+    0.4248
+   ]
+  }
+ },
+ "stressed": {
+  "center": "#dea000",
+  "edge": "#de9059",
+  "rainbow": null,
+  "viewCenter": "#f4bf80",
+  "viewEdge": "#efb696",
+  "viewRainbow": null,
+  "filament": "#fce878",
+  "filamentPower": 1.0,
+  "halo": "#ffbe8c",
+  "haloPower": 0.85,
+  "eyes": "squeeze",
+  "hearts": true,
+  "eyeKeys": {},
+  "mouth": {
+   "Wavy": 1
+  },
+  "filamentShape": "Fil_Zigzag",
+  "parts": [
+   "Eyes_Squeeze",
+   "FX_Sweat",
+   "FX_StressMarks"
+  ],
+  "live": {
+   "center": [
+    0.8803,
+    0.3775,
+    0.0563
+   ],
+   "edge": [
+    0.8118,
+    0.3424,
+    0.2207
+   ]
+  }
+ },
+ "thriving": {
+  "center": "#efd221",
+  "edge": "#edd562",
+  "rainbow": null,
+  "viewCenter": "#fbee8e",
+  "viewEdge": "#f9e69e",
+  "viewRainbow": null,
+  "filament": "#fcf296",
+  "filamentPower": 1.1,
+  "halo": "#ffe48c",
+  "haloPower": 1.1,
+  "eyes": "open",
+  "hearts": false,
+  "eyeKeys": {},
+  "mouth": {
+   "Open": 1
+  },
+  "filamentShape": null,
+  "parts": [
+   "Eye_Stars",
+   "FX_Sparkles"
+  ],
+  "live": {
+   "center": [
+    0.9362,
+    0.7711,
+    0.0724
+   ],
+   "edge": [
+    0.932,
+    0.6932,
+    0.235
+   ]
+  }
+ },
+ "celebrating": {
+  "center": "#f1e23f",
+  "edge": null,
+  "rainbow": [
+   [
+    0.0,
+    "#e8c1b1"
+   ],
+   [
+    0.22,
+    "#3ef7d8"
+   ],
+   [
+    0.38,
+    "#ff45ff"
+   ],
+   [
+    0.52,
+    "#0bffe2"
+   ],
+   [
+    0.72,
+    "#c78aed"
+   ],
+   [
+    0.88,
+    "#2a0002"
+   ],
+   [
+    1.0,
+    "#e8c1b1"
+   ]
+  ],
+  "viewCenter": "#fbef8a",
+  "viewEdge": "#ded1d8",
+  "viewRainbow": [
+   [
+    0.0,
+    "#f8decd"
+   ],
+   [
+    0.22,
+    "#ccfce6"
+   ],
+   [
+    0.38,
+    "#c3edfb"
+   ],
+   [
+    0.52,
+    "#b5eaef"
+   ],
+   [
+    0.72,
+    "#d4ade9"
+   ],
+   [
+    0.88,
+    "#e398d0"
+   ],
+   [
+    1.0,
+    "#f8decd"
+   ]
+  ],
+  "filament": "#fcf096",
+  "filamentPower": 1.0,
+  "halo": "#f0d2fa",
+  "haloPower": 0.9,
+  "eyes": "closed",
+  "hearts": true,
+  "eyeKeys": {},
+  "mouth": {
+   "Open": 1
+  },
+  "filamentShape": null,
+  "parts": [
+   "Eyes_Closed",
+   "FX_Confetti"
+  ],
+  "live": {
+   "center": [
+    0.9212,
+    1.0606,
+    0.2833
+   ],
+   "edge": [
+    0.7305,
+    0.6376,
+    0.6867
+   ],
+   "rainbow": [
+    [
+     0.9387,
+     0.6041,
+     0.5228
+    ],
+    [
+     0.2874,
+     0.9656,
+     0.8058
+    ],
+    [
+     1.4668,
+     0.0912,
+     1.8371
+    ],
+    [
+     0.0227,
+     1.5449,
+     0.8216
+    ],
+    [
+     0.4837,
+     0.3163,
+     0.9806
+    ],
+    [
+     0.5684,
+     0.0081,
+     0.4186
+    ],
+    [
+     0.9387,
+     0.6041,
+     0.5228
+    ]
+   ]
+  }
+ }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@bulbu/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../.env src/index.ts",
+    "start": "tsx --env-file-if-exists=../.env src/index.ts",
+    "seed": "tsx src/seed.ts --reset",
+    "test": "node --import tsx --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@bulbu/engine": "*",
+    "@hono/node-server": "1.19.17",
+    "hono": "4.13.14"
+  },
+  "devDependencies": {
+    "tsx": "4.19.2"
+  }
+}

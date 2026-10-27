@@ -1,0 +1,10 @@
+{
+  "name": "Bulbu",
+  "short_name": "Bulbu",
+  "description": "Small steps. A better you.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#EAF1FF",
+  "theme_color": "#3F5BF6",
+  "icons": [{ "src": "/bulbu.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@bulbu/engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bulbu's deterministic forecasting engine: goal pace, ETA, activity impact in days, swaps, what-if, patterns.",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\""
+  }
+}

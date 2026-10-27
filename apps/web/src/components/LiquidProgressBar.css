@@ -1,0 +1,46 @@
+/* LiquidProgressBar — see LiquidProgressBar.tsx. Everything is clipped to the track; nothing affects layout. */
+.lpb {
+  position: relative; width: 100%; height: var(--lq-h); flex: none;
+  border-radius: 999px; clip-path: inset(0 round 999px); isolation: isolate; contain: layout paint;
+  background: linear-gradient(180deg, #DCE3FA 0%, #E7ECFC 55%, #EEF2FE 100%);
+  box-shadow: inset 0 1px 2px rgba(52, 72, 190, .16), inset 0 -1px 0 rgba(255, 255, 255, .9);
+}
+.lpb-fill {
+  position: absolute; left: 0; top: 0; bottom: 0; max-width: 100%;
+  border-radius: 999px; overflow: hidden; isolation: isolate; transform: translateZ(0); /* translateZ: Safari clips animated children to the radius */
+  background: var(--lq-grad);
+  /* inner shading (deep lower edge, lit upper edge) + soft coloured glow that spills only into the track */
+  box-shadow:
+    inset 0 calc(var(--lq-h) * -0.22) calc(var(--lq-h) * 0.3) color-mix(in srgb, var(--lq-deep) 38%, transparent),
+    inset 0 calc(var(--lq-h) * 0.1) calc(var(--lq-h) * 0.18) rgba(255, 255, 255, .45),
+    0 0 calc(var(--lq-h) * 0.55) color-mix(in srgb, var(--lq-glow) 55%, transparent);
+  transition: width .8s cubic-bezier(.2, .8, .2, 1);
+}
+.lpb-fill::before { /* thin bright rim around the jelly */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 3;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .45);
+}
+.lpb-svg { position: absolute; left: 0; top: 0; display: block; overflow: hidden; z-index: 1; }
+.lpb-gloss { /* glossy highlight: a static rounded streak along the top */
+  position: absolute; z-index: 2; pointer-events: none;
+  left: calc(var(--lq-h) * .42); right: calc(var(--lq-h) * .42); top: 17%; height: 24%; min-height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, .3), rgba(255, 255, 255, .62) 14%, rgba(255, 255, 255, .55) 86%, rgba(255, 255, 255, .22));
+  filter: blur(.3px);
+}
+.lpb-shade { /* inner shading toward the bottom */
+  position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: inherit;
+  background: linear-gradient(180deg, transparent 45%, color-mix(in srgb, var(--lq-deep) 22%, transparent) 100%);
+}
+.lpb-bubble { transform-box: fill-box; transform-origin: center; }
+
+/* ---- motion: same speed for every scheme; only things inside the fill move */
+.lpb.is-animated .lpb-wave { animation: lpb-wave 7s linear infinite; }
+.lpb.is-animated .lpb-bubble { animation: lpb-bob 4s ease-in-out infinite; }
+@keyframes lpb-wave { to { transform: translateX(calc(var(--lq-period) * -1)); } }
+@keyframes lpb-bob { 0%, 100% { transform: translateY(0) scale(1); opacity: .85; } 50% { transform: translateY(-8%) scale(1.06); opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .lpb .lpb-wave, .lpb .lpb-bubble { animation: none !important; }
+  .lpb-fill { transition: none; }
+}
