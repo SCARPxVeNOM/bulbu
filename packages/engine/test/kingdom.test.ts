@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { kingdom, MAX_FLOORS, type Activity, type Goal } from "../src/index.ts";
+import { buildingReport, kingdom, niceDate, MAX_FLOORS, type Activity, type Goal } from "../src/index.ts";
 
 const NOW = new Date(2026, 9, 29, 18, 0);
 const created = new Date(2026, 9, 1).toISOString();
@@ -39,4 +39,19 @@ test("scrolling rolls the Dim over the buildings it slowed; good moves make them
   assert.ok(study.glow > calm.glow, "solving problems makes the Library glow");
   const old = kingdom([iphone, dsa], [act({ category: "social_media", minutes: 180, app: "Instagram" }, 72)], NOW).buildings.find(b => b.id === "Library")!;
   assert.equal(old.fog, 0, "the Dim clears after a couple of days");
+});
+
+test("the building report: the construction maths adds up, and today's moves show how they shifted the finish", () => {
+  const scroll = act({ category: "social_media", minutes: 120, app: "Instagram" }, 1);
+  const solve = act({ category: "code", minutes: 60, units: 3 }, 3);
+  const r = buildingReport("Library", [iphone, dsa], [scroll, solve], NOW)!;
+  assert.equal(r.goalId, "dsa");
+  assert.equal(r.moves.length, 2);
+  assert.ok(r.moves.find(m => m.activityId === scroll.id)!.days > 0, "scrolling pushes the finish later");
+  assert.ok(r.moves.find(m => m.activityId === solve.id)!.days < 0, "solving brings it closer");
+  assert.ok(Math.abs(r.todayShift - r.moves.reduce((s, m) => s + m.days, 0)) < 1e-9);
+  assert.equal(r.steps.at(-1)!.value.endsWith(niceDate(r.eta!)), true);
+  assert.ok(r.steps.some(s => s.label === "Slowed today"));
+  assert.equal(r.nextFloorAt, r.level * 20);
+  assert.equal(buildingReport("Vault", [iphone, dsa], [], NOW), null, "no goal, no building");
 });

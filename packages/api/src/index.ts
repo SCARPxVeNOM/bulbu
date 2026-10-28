@@ -2,11 +2,11 @@
 // Pass `getUserId` from wherever the app keeps the session (localStorage on web, AsyncStorage / SecureStore on RN).
 import type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove,
 } from "@bulbu/engine";
 export type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove,
 };
 
 /** "sweater" and "hoodie" are the built-in outfits; the eight Bulbus are OutfitIds; null is no outfit. */
@@ -168,6 +168,8 @@ export function createBulbuClient(o: ClientOptions = {}) {
 
     // Bulbu World and the inventory
     world: () => call<WorldState>("GET", "/world"),
+    /** one building of Bulbu's Kingdom: construction ETA, today's shift, the maths behind it */
+    building: (id: BuildingId) => call<BuildingReport>("GET", `/kingdom/${q(id)}`),
     tutorial: (step: number, gift = false) => call<WorldState>("POST", "/world/tutorial", { step, gift }),
     inventory: () => call<Inventory>("GET", "/inventory"),
     buyItem: (id: string) => call<Inventory>("POST", `/inventory/${q(id)}/buy`),

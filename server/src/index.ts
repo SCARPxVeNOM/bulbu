@@ -5,7 +5,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { addRealItem, buyItem, classifyApp, insights, inventory, NEW_WORLD, outfitStates, updateRealItem, upgradeItem, worldState, type AppKind, type GoalTemplate, type RealItem, type WorldSave } from "@bulbu/engine";
+import { addRealItem, buildingReport, KINGDOM_BUILDINGS, buyItem, classifyApp, insights, inventory, NEW_WORLD, outfitStates, updateRealItem, upgradeItem, worldState, type AppKind, type BuildingId, type GoalTemplate, type RealItem, type WorldSave } from "@bulbu/engine";
 
 const STARTER_LIGHT = 100;
 import { store, uid, type Fact, type User } from "./db.ts";
@@ -145,6 +145,13 @@ const keep = (id: string, r: { save: WorldSave } | { error: string }) => {
   store.putUser({ ...store.user(id)!, world: r.save });
   return null;
 };
+// a building in Bulbu's Kingdom: its construction maths, today's moves and a move that would help
+app.get("/api/kingdom/:id", c => {
+  const id = c.req.param("id") as BuildingId, uid = c.get("uid");
+  if (!KINGDOM_BUILDINGS.includes(id)) return c.json({ error: `No building "${id}"` }, 404);
+  const r = buildingReport(id, store.goals(uid), store.activities(uid), new Date());
+  return r ? c.json(r) : c.json({ error: "Nothing is built there yet. Add a goal to build it." }, 404);
+});
 app.get("/api/world", c => c.json(worldState(store.goals(c.get("uid")), store.activities(c.get("uid")), save(c.get("uid")), new Date())));
 app.get("/api/inventory", c => c.json(invOf(c.get("uid"))));
 app.post("/api/inventory/:id/buy", c => {

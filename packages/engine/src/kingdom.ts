@@ -5,8 +5,10 @@
 // A building's level follows the goal's progress, it's under construction until the goal is reached, and its
 // construction ETA is the forecast's date. Distraction doesn't take anything away: it rolls the Dim (fog) over the
 // buildings it slowed down. Good moves make them glow.
-import type { Activity, Goal, GoalTemplate } from "./types.ts";
-import { forecast, impactsOf } from "./forecast.ts";
+import type { Activity, Goal, GoalTemplate, Pace, Step, Swap } from "./types.ts";
+import { fmtDays, forecast, impactsOf, startOfDay, swapFor } from "./forecast.ts";
+import { addDays, dayKey, fmtMoney, fmtNum, plural } from "./util.ts";
+import { def } from "./templates.ts";
 
 export type BuildingId = "Castle" | "Library" | "Vault" | "Arena" | "Observatory" | "Workshop";
 
@@ -18,6 +20,8 @@ export const BUILDINGS: Record<BuildingId, { name: string; blurb: string }> = {
   Observatory: { name: "Observatory", blurb: "Grows as your reading and learning goal moves." },
   Workshop: { name: "Workshop", blurb: "Grows with any other goal." },
 };
+
+export const KINGDOM_BUILDINGS = Object.keys(BUILDINGS) as BuildingId[];
 
 const BUILDING_OF: Record<GoalTemplate, BuildingId> = {
   dsa: "Library", productivity: "Library", fitness: "Arena", savings: "Vault", iphone: "Vault",
@@ -86,3 +90,76 @@ export function kingdom(goals: Goal[], history: Activity[], now: Date): KingdomS
   const plots = (Object.keys(BUILDINGS) as BuildingId[]).filter(id => !taken.has(id));
   return { buildings, plots, mainGoalId: main?.id ?? null };
 }
+
+// ------------------------------------------------------------------ one building, in detail
+
+export interface BuildingMove {
+  activityId: string;
+  label: string;
+  at: string;
+  /** signed: positive = construction finishes later, negative = sooner */
+  days: number;
+  equivalent: string;
+  breakdown: Step[];
+}
+
+export interface BuildingReport extends BuildingState {
+  /** the goal's template (what kind of goal the building holds) */
+  template: GoalTemplate;
+  unit: string;
+  money: boolean;
+  progress: number;
+  target: number;
+  remaining: number;
+  pace: Pace;
+  /** how today's moves shifted the finish (signed days, + later) */
+  todayShift: number;
+  /** when it would finish without today's moves */
+  etaBefore: string | null;
+  /** today's moves on this building, biggest first */
+  moves: BuildingMove[];
+  /** the construction maths, step by step (tap to see why) */
+  steps: Step[];
+  /** the progress (%) where the next floor goes up; null on the top floor */
+  nextFloorAt: number | null;
+  /** one small move that would bring the finish closer (the card for this building) */
+  swap: Swap;
+}
+
+/** Everything the building panel shows. Null when no building holds that goal. */
+export function buildingReport(id: BuildingId, goals: Goal[], history: Activity[], now: Date): BuildingReport | null {
+  const b = kingdom(goals, history, now).buildings.find(x => x.id === id);
+  const goal = b && goals.find(g => g.id === b.goalId);
+  if (!b || !goal) return null;
+  const f = forecast(goal, goals, history, now), d = def(goal.template), money = goal.kind === "savings";
+  const u = (n: number) => money ? fmtMoney(n) : `${fmtNum(n)} ${plural(d.unit, n)}`;
+  const of = (a: number, b: number) => money ? `${fmtMoney(a)} of ${fmtMoney(b)}` : `${fmtNum(a)} of ${u(b)}`;
+  const today = dayKey(now);
+  const moves: BuildingMove[] = history.filter(a => dayKey(a.at) === today && +new Date(a.at) <= +now)
+    .flatMap(a => impactsOf(goals, history, a, now).filter(i => i.goalId === goal.id)
+      .map(i => ({ activityId: a.id, label: a.label, at: a.at, days: i.days, equivalent: i.equivalent, breakdown: i.breakdown })))
+    .sort((x, y) => Math.abs(y.days) - Math.abs(x.days));
+  const todayShift = moves.reduce((s, m) => s + m.days, 0), slowed = moves.reduce((s, m) => s + Math.max(0, m.days), 0);
+  const etaBefore = f.done ? f.eta : dayKey(addDays(startOfDay(now), Math.ceil(Math.max(0, f.daysLeft - todayShift))).toISOString());
+  const src = f.pace.basedOnDays >= 7 ? `your last ${f.pace.basedOnDays} days` : f.pace.basedOnDays > 0 ? `${f.pace.basedOnDays} days of yours + a starting estimate` : "a starting estimate";
+  const steps: Step[] = f.done
+    ? [{ label: "Built", value: `${of(f.progress, goal.target)}` }, { label: "Finished", value: "Nothing left to build" }]
+    : [
+        { label: "Built so far", value: `${of(f.progress, goal.target)} (${Math.floor(f.percent)}%)` },
+        { label: "Left to build", value: u(f.remaining) },
+        { label: "Your pace", value: `${u(f.pace.perDay)} a day (${src})` },
+        { label: "Time to finish", value: `${u(f.remaining)} ÷ ${u(f.pace.perDay)} a day = ${fmtNum(f.remaining / f.pace.perDay)} days` },
+        // today's progress is already in "built so far"; time lost today (the Dim) is added on top
+        ...(slowed >= 0.05 ? [{ label: "Slowed today", value: fmtDays(slowed) }] : []),
+        { label: "Finishes", value: `today + ${Math.ceil(f.daysLeft)} days = ${f.eta ? niceDate(f.eta) : "—"}` },
+      ];
+  const nextFloorAt = b.level >= MAX_FLOORS ? null : b.level * (100 / MAX_FLOORS);
+  return {
+    ...b, template: goal.template, unit: d.unit, money, progress: f.progress, target: goal.target, remaining: f.remaining, pace: f.pace,
+    todayShift, etaBefore, moves, steps, nextFloorAt, swap: swapFor(goal, f.pace),
+  };
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "2027-01-17" -> "17 Jan 2027" */
+export const niceDate = (iso: string) => { const [y, m, d] = iso.split("-").map(Number); return `${d} ${MONTHS[m - 1]} ${y}`; };

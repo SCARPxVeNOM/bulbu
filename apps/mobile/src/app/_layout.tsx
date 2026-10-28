@@ -59,6 +59,7 @@ function Root() {
         <Stack.Screen name="achievements" />
         <Stack.Screen name="screen-time" />
         <Stack.Screen name="journal" />
+        <Stack.Screen name="building/[id]" />
       </Stack.Protected>
     </Stack>
   );

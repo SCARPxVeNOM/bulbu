@@ -66,7 +66,7 @@ export default function Home() {
   const kv = kingdomView(state);
   const openBuilding = (id: string) => {
     const b = state.kingdom.buildings.find(x => x.id === id);
-    if (b) router.push(`/goal/${b.goalId}` as never);
+    if (b) router.push(`/building/${id}` as never);
     else router.navigate("/goals" as never);              // an empty plot: add a goal to build there
   };
   const step = async (n: number, gift = false) => { try { await api.tutorial(n, gift); await refresh(); } catch (e) { toast((e as Error).message); } };
