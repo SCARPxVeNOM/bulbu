@@ -660,7 +660,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   function showGear() {
     if (!gearId) return false;
     if (!gearGroup || !model) { pendingShow = true; return true; }
-    showT = 0; popT = 0;
+    showT = 0; popT = 0; released = false;
     setEmote("happy");
     const a = actions[HOLD.clip];
     if (a) {
@@ -671,14 +671,25 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     applyGear();
     return true;
   }
+  // As the item shrinks away the arms come down: the hold pose fades out (still frozen, so no typing) into the motion
+  // Bulbu had before, once. Then everything is back to normal until the next tap.
+  let released = false, heldClip = null;
+  function releaseHold() {
+    if (released) return;
+    released = true;
+    const a = holdAction; holdAction = null; heldClip = a;
+    const back = baseAnim === HOLD.clip ? "Idle" : baseAnim, next = actions[back];
+    if (next) { next.reset().setEffectiveWeight(1).fadeIn(HOLD.ease).play(); current = next; playing = back; }
+    Object.values(actions).forEach(x => { if (x !== next && x.getEffectiveWeight() > 0) x.fadeOut(HOLD.ease); });
+  }
   function endShow() {
+    releaseHold();
     showT = -1; holdW = 0; squint = 0;
     if (headBone) headBone.quaternion.copy(headBone.userData.rest[1]);
-    if (gearGroup) gearGroup.visible = false;
+    if (gearGroup) { gearGroup.visible = false; gearGroup.scale.setScalar(1); }
     if (model) model.rotation.y = 0;
-    if (holdAction) { holdAction.timeScale = 1; holdAction = null; }
-    setOutfit(outfit);
-    const back = baseAnim; current = null; play(back === HOLD.clip ? "Idle" : back, 0.45);
+    if (heldClip) { heldClip.stop(); heldClip.timeScale = 1; heldClip = null; }
+    setOutfit(outfit);                 // the outfit's own motion (typing, curls) and face come back
   }
   const qLook = new THREE.Quaternion(), eLook = new THREE.Euler();
   function updateGear(dt, t) {
@@ -702,6 +713,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
       headBone.quaternion.multiply(qLook);
     }
     squint = 0.38 * holdW;
+    if (showT >= D - ease) releaseHold();
     if (showT >= D) endShow();
   }
 
