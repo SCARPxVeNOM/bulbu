@@ -7,7 +7,17 @@ import { longestRun } from "./outfits.ts";
 import { dayKey } from "./util.ts";
 
 /** A real-life purchase the user added (Bulbu gets one too). */
-export interface RealItem { id: string; item: string; at: string; price?: number; note?: string }
+/** Something the user bought in real life. From a photo, it also keeps what Muse Spark saw, SAM's cut-out of it and the
+ *  picture Muse Image drew of Bulbu with it (files are names under the server's /media). */
+export interface RealItem {
+  id: string; item: string; at: string; price?: number; note?: string;
+  /** what it is, e.g. "iPad (10th gen) in blue" */
+  name?: string; color?: string; engraving?: string;
+  photo?: { file: string; width: number; height: number };
+  cutout?: { mask: string; box: { left: number; top: number; right: number; bottom: number } };
+  cutState?: "cutting" | "failed";
+  art?: string; artState?: "drawing" | "failed";
+}
 
 /** The part of the world that is saved per user (the rest is computed from the ledger). */
 export interface WorldSave {

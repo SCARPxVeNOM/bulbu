@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Activity, AppKind, Goal, WorldSave } from "@bulbu/engine";
+import { ITEMS, type Activity, type AppKind, type Goal, type WorldSave } from "@bulbu/engine";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const file = process.env.BULBU_DB ?? path.resolve(here, "../data/bulbu.db");
@@ -23,6 +23,8 @@ export interface User {
   id: string; name: string; createdAt: string; demo?: boolean;
   /** "sweater" | "hoodie" (built-in), one of the eight Bulbu outfit ids, or null */
   outfit: string | null; theme: string;
+  /** the real-life item Bulbu is holding (on top of the outfit) */
+  gear?: string | null;
   /** the user's own app classifications, keyed by lower-case app name */
   appKinds?: Record<string, AppKind>;
   /** last nightly reflection, and the note from it */
@@ -55,7 +57,7 @@ const rows = <T>(sql: string, ...p: (string | number)[]) => (db.prepare(sql).all
 
 export const store = {
   users: () => rows<User>("SELECT data FROM users"),
-  user: (id: string) => rows<User>("SELECT data FROM users WHERE id = ?", id)[0],
+  user: (id: string) => wearing(rows<User>("SELECT data FROM users WHERE id = ?", id)[0]),
   putUser: (u: User) => db.prepare("INSERT OR REPLACE INTO users (id, data) VALUES (?, ?)").run(u.id, JSON.stringify(u)),
 
   goals: (uid: string) => rows<Goal>("SELECT data FROM goals WHERE user_id = ? ORDER BY rowid", uid),
@@ -77,3 +79,10 @@ export const store = {
 };
 
 export const uid = (p = "") => p + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+
+// Before Bulbu could hold things, a real-life item was "worn" as the outfit. It's held now, with the outfit on.
+const REAL_IDS = new Set(ITEMS.filter(i => i.source === "real").map(i => i.id));
+function wearing(u: User | undefined): User | undefined {
+  if (!u || !u.outfit || !REAL_IDS.has(u.outfit)) return u;
+  return { ...u, gear: u.gear ?? u.outfit, outfit: "sweater" };
+}

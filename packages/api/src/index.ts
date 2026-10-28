@@ -11,7 +11,7 @@ export type {
 
 /** "sweater" and "hoodie" are the built-in outfits; the eight Bulbus are OutfitIds; null is no outfit. */
 export type OutfitChoice = "sweater" | "hoodie" | OutfitId | null;
-export interface User { id: string; name: string; demo?: boolean; outfit: OutfitChoice; theme: string }
+export interface User { id: string; name: string; demo?: boolean; outfit: OutfitChoice; theme: string; gear?: string | null }
 export interface Fact { id: string; kind: "fact" | "pattern" | "promise" | "win"; text: string; detail?: string; confidence: number; source: "stated" | "inferred"; createdAt: string; updatedAt: string; checkAt?: string; done?: boolean }
 export interface Nudge { id: string; kind: string; at: string; text: string; emote: Emote; action: { label: string; to: string } }
 export interface GoalView extends Goal { subtitle: string; forecast: Forecast; swap: Swap; task: { label: string; done: boolean }; series: { day: string; percent: number }[] }
@@ -174,6 +174,15 @@ export function createBulbuClient(o: ClientOptions = {}) {
     /** something bought in real life ("AirPods", "running shoes"): Bulbu gets one too */
     addRealItem: (item: string, o: { price?: number; note?: string } = {}) => call<Inventory>("POST", "/inventory/real", { item, ...o }),
     removeRealItem: (item: string) => call<Inventory>("DELETE", `/inventory/real/${q(item)}`),
+    /** take it off / put it away (an outfit or the real-life item Bulbu holds) */
+    unequipItem: (id: string) => call<Inventory>("POST", `/inventory/${q(id)}/unequip`),
+    /** "I bought this": a photo (data URL). Muse Spark says what it is and it goes into the inventory and Bulbu's hand;
+     *  the cut-out (SAM 3.1) and Bulbu's picture with it (Muse Image) arrive a little later on the item's `mine`. */
+    realPhoto: (image: string, size: { width: number; height: number }) =>
+      call<{ matched: string | null; seen: string; added?: boolean; inventory: Inventory }>("POST", "/inventory/real/photo", { image, ...size }),
+    redrawArt: (item: string) => call<Inventory>("POST", `/inventory/real/${q(item)}/art`),
+    /** full URL of a photo or picture from `mine` */
+    mediaUrl: (file: string) => `${base.slice(0, -4)}/media/${encodeURIComponent(file)}`,
 
     // the eight Bulbus
     outfits: () => call<{ equipped: OutfitChoice; outfits: OutfitState[] }>("GET", "/outfits"),

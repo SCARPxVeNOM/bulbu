@@ -12,6 +12,7 @@
   "dependencies": {
     "@bulbu/engine": "*",
     "@hono/node-server": "1.19.17",
+    "@meta-sam/parser": "0.0.10",
     "hono": "4.13.14"
   },
   "devDependencies": {

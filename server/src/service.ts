@@ -47,7 +47,7 @@ export function snapshot(userId: string, now = new Date()) {
     nudges: nudges(user, goals, acts, facts, now), achievements: achievements(goals, acts, now),
     outfits: outfitStates(goals, acts, now), letter: user.letter ?? null,
     world: worldState(goals, acts, user.world ?? NEW_WORLD, now),
-    inventory: inventory(goals, acts, user.world ?? NEW_WORLD, user.outfit, now),
+    inventory: inventory(goals, acts, user.world ?? NEW_WORLD, user.outfit, now, user.gear ?? null),
     ai: { enabled: ai.enabled, models: ai.models }, now: now.toISOString(),
   };
 }

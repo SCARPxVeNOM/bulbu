@@ -18,7 +18,8 @@ export default function Home() {
   const ins = useSafeAreaInsets();
   if (!state) return null;
   const world = state.world, inv = state.inventory;
-  const wearing = inv.items.find(i => i.equipped);
+  const wearing = inv.items.find(i => i.equipped && i.source !== "real");
+  const held = inv.items.find(i => i.id === inv.gear && i.owned);
   const shopReady = inv.items.filter(i => i.affordable).length;
   // Bulbu gets sleepy when today is mostly scrolling
   const emote = reaction?.emote ?? (world.fog > 0.6 ? "drained" : state.emote);
@@ -27,6 +28,7 @@ export default function Home() {
   return (
     <View style={{ flex: 1, backgroundColor: "#a3b2f3" }}>
       <Bulbu world keepAlive emote={emote} glow={(reaction?.glow ?? state.glow) + (wearing ? (wearing.level - 1) * 0.15 : 0)} outfit={state.user.outfit}
+             gear={held?.hold ? held.id : null} gearColor={held?.mine?.color}
              line={world.tutorial >= 0 ? null : reaction?.line} animation={reaction?.animation} cue={reaction ? 1 : 0} style={{ position: "absolute", inset: 0 }} />
       <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, top: 0, paddingTop: Math.max(12, ins.top + 4), paddingHorizontal: 14 }}>
         <Hud world={world} name={state.user.name} nudges={state.nudges.length} />
@@ -44,9 +46,11 @@ export default function Home() {
         {shopReady > 0 && <View style={{ position: "absolute", top: -6, right: -6, minWidth: 22, height: 22, borderRadius: 11, backgroundColor: C.red, borderWidth: 2, borderColor: "#fff", alignItems: "center", justifyContent: "center", paddingHorizontal: 4 }}>
           <Text style={{ color: "#fff", fontFamily: F.heavy, fontSize: 11 }}>{shopReady}</Text></View>}
       </Pressable>
-      {wearing && (
-        <View pointerEvents="none" style={{ position: "absolute", left: 16, bottom: 130 + ins.bottom, backgroundColor: "rgba(255,255,255,.85)", borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1.5, borderColor: "#fff" }}>
-          <Text style={{ fontFamily: F.bold, fontSize: 12, color: C.ink }}>Wearing {wearing.name} · {"★".repeat(wearing.level)}</Text>
+      {(wearing || held) && (
+        <View pointerEvents="none" style={{ position: "absolute", left: 16, right: 100, bottom: 130 + ins.bottom, alignItems: "flex-start" }}>
+          <View style={{ backgroundColor: "rgba(255,255,255,.85)", borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1.5, borderColor: "#fff" }}>
+            <Text numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 12, color: C.ink }}>{[wearing && `Wearing ${wearing.name} · ${"★".repeat(wearing.level)}`, held && `with your ${held.name}`].filter(Boolean).join(" ")}</Text>
+          </View>
         </View>
       )}
 

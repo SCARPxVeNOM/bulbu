@@ -20,6 +20,7 @@ interface Api {
   headBox(): { x: number; top: number; bottom: number; left: number; right: number } | null;
   setBackground(hex: string): void; setView(pos: [number, number, number], target: [number, number, number]): void; setStage(stage: unknown | null): void;
   glow: number; outfit: string | null; paused: boolean; interactive: boolean; emote: string;
+  setGear(id: string | null, url?: string, opts?: { color?: string }): void; showGear(): void; gearDefs: Record<string, unknown>;
 }
 
 export interface BulbuDomProps {
@@ -29,6 +30,12 @@ export interface BulbuDomProps {
   cue?: number;
   glow?: number;
   outfit?: string | null;
+  /** a real-life item Bulbu holds (one with a 3D model in public/gear) */
+  gear?: string | null;
+  /** the colour of the user's own one (hex) */
+  gearColor?: string;
+  /** change it to make Bulbu show the item off */
+  show?: number;
   line?: string | null;
   background?: string;
   view?: BulbuView;
@@ -41,7 +48,7 @@ export interface BulbuDomProps {
 
 const base = () => { const b = process.env.EXPO_BASE_URL || "/"; return b.endsWith("/") ? b : b + "/"; };
 
-export default function BulbuDom({ emote, animation, cue, glow, outfit, line, background = "#E9F0FF", view = "full", world = false, paused = false, interactive = false, onPoke }: BulbuDomProps) {
+export default function BulbuDom({ emote, animation, cue, glow, outfit, gear, gearColor, show, line, background = "#E9F0FF", view = "full", world = false, paused = false, interactive = false, onPoke }: BulbuDomProps) {
   const host = useRef<HTMLDivElement>(null);
   const bubble = useRef<HTMLDivElement>(null);
   const [api, setApi] = useState<Api | null>(null);
@@ -74,6 +81,11 @@ export default function BulbuDom({ emote, animation, cue, glow, outfit, line, ba
   useEffect(() => { if (api && emote && api.emote !== emote) api.setEmote(emote); }, [api, emote]);
   useEffect(() => { if (api && glow != null) api.glow = glow; }, [api, glow]);
   useEffect(() => { if (api && outfit !== undefined) api.outfit = outfit; }, [api, outfit]);
+  useEffect(() => {
+    if (!api || gear === undefined) return;
+    api.setGear(gear && api.gearDefs[gear] ? gear : null, gear ? `${base()}gear/${gear}.glb` : undefined, { color: gearColor });
+  }, [api, gear, gearColor]);
+  useEffect(() => { if (api && show) api.showGear(); }, [api, show]);
   useEffect(() => { if (api) api.paused = paused; }, [api, paused]);
   useEffect(() => { if (api && animation && animation !== "Idle") api.play(animation); }, [api, animation, cue]);
 

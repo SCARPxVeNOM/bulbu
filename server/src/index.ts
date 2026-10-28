@@ -5,7 +5,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { addRealItem, buyItem, classifyApp, insights, inventory, NEW_WORLD, outfitStates, upgradeItem, worldState, type AppKind, type GoalTemplate, type WorldSave } from "@bulbu/engine";
+import { addRealItem, buyItem, classifyApp, insights, inventory, NEW_WORLD, outfitStates, updateRealItem, upgradeItem, worldState, type AppKind, type GoalTemplate, type RealItem, type WorldSave } from "@bulbu/engine";
 
 const STARTER_LIGHT = 100;
 import { store, uid, type Fact, type User } from "./db.ts";
@@ -14,6 +14,7 @@ import { seed, seedIfEmpty, DEMO_USERS } from "./seed.ts";
 import { snapshot, log, chat, whatIf, reflect, remember, type LogInput } from "./service.ts";
 import { ai, transcribe } from "./ai.ts";
 import { ingestUsage, type UsageInput } from "./usage.ts";
+import { cutout, dataUrlBytes, drawBulbuWith, dropMedia, identify, mediaPath, note, saveMedia } from "./purchase.ts";
 
 seedIfEmpty();
 const app = new Hono<{ Variables: { uid: string } }>();
@@ -35,6 +36,14 @@ app.post("/api/users", async c => {
   return c.json(user);
 });
 app.post("/api/demo/reset", c => { seed(); return c.json({ ok: true, users: DEMO_USERS.map(u => u.id) }); });
+
+// photos, cut-outs and pictures from "I bought it" (random file names; no listing)
+app.get("/media/:file", c => {
+  const f = mediaPath(c.req.param("file"));
+  if (!/^[a-z]+-[\w-]+\.(jpg|jpeg|png|webp)$/i.test(path.basename(f)) || !fs.existsSync(f)) return c.notFound();
+  const ext = path.extname(f).slice(1).toLowerCase();
+  return c.body(fs.readFileSync(f), 200, { "content-type": ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg", "cache-control": "public, max-age=31536000, immutable" });
+});
 
 // everything below needs a user
 app.use("/api/*", async (c, next) => {
@@ -128,7 +137,7 @@ app.delete("/api/apps/:name", c => {
 
 // Bulbu World: level, XP, Light, streak, and Bulbu's inventory
 const save = (id: string) => store.user(id)!.world ?? NEW_WORLD;
-const invOf = (id: string) => inventory(store.goals(id), store.activities(id), save(id), store.user(id)!.outfit, new Date());
+const invOf = (id: string) => { const u = store.user(id)!; return inventory(store.goals(id), store.activities(id), save(id), u.outfit, new Date(), u.gear ?? null); };
 const keep = (id: string, r: { save: WorldSave } | { error: string }) => {
   if ("error" in r) return r;
   store.putUser({ ...store.user(id)!, world: r.save });
@@ -150,7 +159,14 @@ app.post("/api/inventory/:id/equip", c => {
   const it = invOf(id).items.find(i => i.id === want);
   if (!it) return c.json({ error: `Unknown item "${want}"` }, 400);
   if (!it.owned) return c.json({ error: `${it.name} is still locked. ${it.detail}.` }, 403);
-  store.putUser({ ...u, outfit: it.outfit ?? it.id });
+  // real-life things are held on top of the outfit; everything else is the outfit
+  store.putUser(it.source === "real" ? { ...u, gear: it.id } : { ...u, outfit: it.outfit ?? it.id });
+  return c.json(invOf(id));
+});
+app.post("/api/inventory/:id/unequip", c => {
+  const id = c.get("uid"), u = store.user(id)!, want = c.req.param("id");
+  if (u.gear === want) store.putUser({ ...u, gear: null });
+  else if (u.outfit === want || invOf(id).items.find(i => i.id === want)?.outfit === u.outfit) store.putUser({ ...u, outfit: null });
   return c.json(invOf(id));
 });
 // real-life purchases: "I bought headphones" -> Bulbu gets headphones
@@ -161,8 +177,54 @@ app.post("/api/inventory/real", async c => {
 });
 app.delete("/api/inventory/real/:item", c => {
   const id = c.get("uid"), w = save(id), u = store.user(id)!, item = c.req.param("item");
-  // taking it out of the inventory also takes it off Bulbu
-  store.putUser({ ...u, ...(u.outfit === item && { outfit: "sweater" }), world: { ...w, real: (w.real ?? []).filter(r => r.item !== item) } });
+  const r = (w.real ?? []).find(x => x.item === item);
+  // taking it out of the inventory also takes it out of Bulbu's hand, and deletes the photo and pictures
+  store.putUser({ ...u, ...(u.gear === item && { gear: null }), ...(u.outfit === item && { outfit: "sweater" }), world: { ...w, real: (w.real ?? []).filter(x => x.item !== item) } });
+  if (r) dropMedia(r.photo?.file, r.cutout?.mask, r.art);
+  return c.json(invOf(id));
+});
+
+// names SAM finds reliably for each item (tried first), then Muse Spark's own phrase
+const SAM_NAMES: Record<string, string[]> = { iphone: ["iphone", "phone"], ipad: ["ipad", "tablet"], headphones: ["headphones"], sneakers: ["shoe"], laptop: ["laptop"], books: ["book"], guitar: ["guitar"], bike: ["bicycle"], watch: ["watch"] };
+// "I bought it" from a photo: Muse Spark says what it is, it goes straight into the inventory and Bulbu's hand,
+// then SAM 3.1 cuts it out of the photo and Muse Image draws Bulbu with it (in the background; the app polls)
+app.post("/api/inventory/real/photo", async c => {
+  const id = c.get("uid"), b = await c.req.json<{ image: string; width?: number; height?: number }>();
+  if (!ai.enabled) return c.json({ error: "Reading photos needs Muse Spark (set META_API_KEY on the server). Pick what you bought from the list instead." }, 400);
+  const img = dataUrlBytes(String(b.image ?? ""));
+  if (!img) return c.json({ error: "Send the photo as a data URL." }, 400);
+  if (img.bytes.length > 6_000_000) return c.json({ error: "That photo is too big. Try a smaller one." }, 413);
+  let found;
+  try { found = await identify(b.image); }
+  catch (e) { note(`identify failed: ${(e as Error).message}`); return c.json({ error: "Bulbu couldn't read that photo. Try again, or pick what you bought from the list." }, 502); }
+  note(`identify: ${found.item ?? "none"} "${found.name}" (${found.confidence})`);
+  if (!found.item || found.confidence < 0.4) return c.json({ matched: null, seen: found.name, inventory: invOf(id) });
+
+  const item = found.item, photo = { file: saveMedia(img.bytes, img.mime.includes("png") ? "png" : img.mime.includes("webp") ? "webp" : "jpg", "photo"), width: Number(b.width) || 0, height: Number(b.height) || 0 };
+  const details: Partial<RealItem> = { name: found.name, color: found.color, engraving: found.engraving, photo, cutState: "cutting", artState: "drawing", ...(found.price && { price: found.price }) };
+  const w = save(id), had = (w.real ?? []).find(r => r.item === item);
+  if (had) { dropMedia(had.photo?.file, had.cutout?.mask, had.art); store.putUser({ ...store.user(id)!, world: updateRealItem(w, item, { ...details, cutout: undefined, art: undefined }) }); }
+  else { const err = keep(id, addRealItem(w, item, new Date(), { extra: details })); if (err) return c.json(err, 400); }
+  store.putUser({ ...store.user(id)!, gear: item });     // Bulbu gets it straight away
+
+  const patch = (p: Partial<RealItem>) => { const u = store.user(id); if (u?.world) store.putUser({ ...u, world: updateRealItem(u.world, item, p) }); };
+  cutout(b.image, ...(SAM_NAMES[item] ?? []), found.concept).then(cut => patch(cut ? { cutout: cut, cutState: undefined } : { cutState: "failed" }))
+    .catch(e => { note(`sam failed: ${(e as Error).message}`); patch({ cutState: "failed" }); });
+  drawBulbuWith(b.image, found.name || item).then(art => patch({ art, artState: undefined }))
+    .catch(e => { note(`muse image failed: ${(e as Error).message}`); patch({ artState: "failed" }); });
+  return c.json({ matched: item, seen: found.name, added: !had, inventory: invOf(id) });
+});
+// draw Bulbu with it again (after a failure, or for a new picture)
+app.post("/api/inventory/real/:item/art", async c => {
+  const id = c.get("uid"), item = c.req.param("item"), r = (save(id).real ?? []).find(x => x.item === item);
+  if (!r?.photo) return c.json({ error: "Add it from a photo first." }, 400);
+  if (!ai.enabled) return c.json({ error: "Drawing needs Muse Image (set META_API_KEY on the server)." }, 400);
+  const patch = (p: Partial<RealItem>) => { const u = store.user(id); if (u?.world) store.putUser({ ...u, world: updateRealItem(u.world, item, p) }); };
+  patch({ artState: "drawing" });
+  const bytes = fs.readFileSync(mediaPath(r.photo.file)), mime = r.photo.file.endsWith(".png") ? "image/png" : r.photo.file.endsWith(".webp") ? "image/webp" : "image/jpeg";
+  const old = r.art;
+  drawBulbuWith(`data:${mime};base64,${bytes.toString("base64")}`, r.name || item).then(art => { patch({ art, artState: undefined }); dropMedia(old); })
+    .catch(e => { note(`muse image failed: ${(e as Error).message}`); patch({ artState: "failed" }); });
   return c.json(invOf(id));
 });
 // Bulbu's tour: save the step; the starter gift is given once

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { NEW_WORLD, addRealItem, buyItem, inventory, levelFromXp, lightOf, upgradeItem, worldState, type Activity, type Goal } from "../src/index.ts";
+import { NEW_WORLD, addRealItem, buyItem, inventory, levelFromXp, matchRealItem, lightOf, upgradeItem, worldState, type Activity, type Goal } from "../src/index.ts";
 
 const NOW = new Date(2026, 9, 28, 18, 0);
 const goal: Goal = { id: "dsa", title: "Crack DSA", template: "dsa", kind: "skill", unit: "problems", target: 300, baseline: 0, primary: true, createdAt: new Date(2026, 9, 1).toISOString() };
@@ -63,4 +63,19 @@ test("levels follow total XP", () => {
   assert.deepEqual(levelFromXp(0), { level: 0, into: 0, span: 100 });
   assert.equal(levelFromXp(100).level, 1);
   assert.equal(levelFromXp(300).level, 2);
+});
+
+test("real-life items Bulbu can hold: the iPad matches, and the held one shows as equipped on top of the outfit", () => {
+  assert.equal(matchRealItem("my new iPad Air")?.id, "ipad");
+  assert.equal(matchRealItem("iphone 17")?.id, "iphone");
+  const r = addRealItem(NEW_WORLD, "ipad", NOW, { extra: { name: "iPad in blue", color: "#6F9FD8" } });
+  assert.ok("save" in r);
+  if (!("save" in r)) return;
+  const inv = inventory([], [], r.save, "sweater", NOW, "ipad");
+  const ipad = inv.items.find(i => i.id === "ipad")!, sweater = inv.items.find(i => i.id === "sweater")!;
+  assert.ok(ipad.owned && ipad.equipped && ipad.hold);
+  assert.ok(sweater.equipped, "the outfit stays on");
+  assert.equal(inv.gear, "ipad");
+  assert.equal(ipad.mine?.color, "#6F9FD8");
+  assert.equal(inventory([], [], NEW_WORLD, "sweater", NOW, "ipad").gear, null, "can't hold what you don't own");
 });
