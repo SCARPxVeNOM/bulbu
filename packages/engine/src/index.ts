@@ -6,3 +6,5 @@ export * from "./insights.ts";
 export * from "./whatif.ts";
 export * from "./apps.ts";
 export * from "./outfits.ts";
+export * from "./world.ts";
+export * from "./inventory.ts";

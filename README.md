@@ -23,12 +23,29 @@ npm run typecheck
 npm run build && npm start   # production: the API also serves apps/web/dist
 ```
 
+## The phone app (`apps/mobile`)
+
+Expo SDK 58 + Expo Router, React Native screens in Bulbu's own design, and the same 3D Bulbu (the web app's three.js engine and GLB, running in a DOM component). It has its own `node_modules` (React 19), so install it separately:
+
+```sh
+npm run dev                      # keep the API running (port 8787)
+cd apps/mobile && npm install
+npx expo start                   # scan the QR code with Expo Go (phone on the same Wi-Fi)
+```
+
+The app finds the API on the computer that serves the bundle (port 8787); set `EXPO_PUBLIC_API_URL` to use another server.
+
+Everything works in **Expo Go** except reading app usage. **Usage access** is native Android code (`modules/bulbu-usage`, Kotlin, `UsageStatsManager`), so it needs Bulbu's own build: `npx expo run:android` with Android Studio installed, or `npx eas-cli build -p android --profile development` and install the APK. Then Profile → Screen time → turn on Usage access; Bulbu syncs today's minutes per app whenever it opens. On iPhone, Apple doesn't share per-app minutes, so Screen Time comes in as a screenshot.
+
+**Voice** records 16 kHz mono WAV with expo-audio and sends it to `/api/voice` (Muse Voice Transcribe). **Photos** (screenshots, receipts, meals) are resized on the phone and read by Muse Spark.
+
 ## How it's built
 
 ```
 packages/engine   Deterministic forecasting engine (TypeScript, no dependencies)
 packages/api      Typed client for the server; only needs fetch, so web and React Native share it
 server            Hono API + SQLite ledger, Meta Model API layer, offline parser, seed data
+apps/mobile       Expo / React Native app (same screens, 3D Bulbu in a DOM component, Android usage access module)
 apps/web          Vite + React app (12 screens + memory + nudges), the 3D Bulbu
 ```
 
@@ -60,6 +77,6 @@ apps/web          Vite + React app (12 screens + memory + nudges), the 3D Bulbu
 ## Not built yet
 
 - Google / Apple sign-in. Profiles are local to the server for now.
-- The React Native app: usage access (feeding `/api/usage`), voice recording (feeding `/api/voice`), push notifications. The API and client are ready for it.
+- Push notifications for nudges in the phone app, and a background usage sync (today it syncs when the app opens).
 - Muse Image outfits and scenes, SAM 3.1 goal objects in Bulbu's world, and the Muse Glimmer "Bulbu Home" offline tier.
 - 3D models for the eight Bulbus. Until they land, wearing one shows Bulbu without an outfit.

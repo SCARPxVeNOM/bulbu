@@ -2,11 +2,11 @@
 // Pass `getUserId` from wherever the app keeps the session (localStorage on web, AsyncStorage / SecureStore on RN).
 import type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Pattern, Step, Swap, WhatIf,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState,
 } from "@bulbu/engine";
 export type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Pattern, Step, Swap, WhatIf,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState,
 };
 
 /** "sweater" and "hoodie" are the built-in outfits; the eight Bulbus are OutfitIds; null is no outfit. */
@@ -34,6 +34,10 @@ export interface Snapshot {
   outfits: OutfitState[];
   /** the latest note from the nightly reflection */
   letter: Letter | null;
+  /** Bulbu World: level, Light, buildings, fog, tour step */
+  world: WorldState;
+  /** everything Bulbu can wear or carry, and how each is earned */
+  inventory: Inventory;
   ai: { enabled: boolean; models: { spark: string; wonder: string } };
   now: string;
 }
@@ -51,6 +55,11 @@ export interface LogResult {
   via: "spark" | "offline" | "quick";
   /** Bulbus earned by this log */
   unlocked?: OutfitId[];
+  /** Light this log made for Bulbu World */
+  light?: number;
+  worldLevel?: { before: number; after: number };
+  /** inventory items this log unlocked (a new level or streak) */
+  items?: { id: string; name: string }[];
   needsText?: boolean;
   message?: string;
 }
@@ -154,6 +163,17 @@ export function createBulbuClient(o: ClientOptions = {}) {
     appOverrides: () => call<Record<string, AppKind>>("GET", "/apps"),
     setAppKind: (name: string, kind: AppKind) => call<Record<string, AppKind>>("PUT", `/apps/${q(name)}`, { kind }),
     clearAppKind: (name: string) => call<Record<string, AppKind>>("DELETE", `/apps/${q(name)}`),
+
+    // Bulbu World and the inventory
+    world: () => call<WorldState>("GET", "/world"),
+    tutorial: (step: number, gift = false) => call<WorldState>("POST", "/world/tutorial", { step, gift }),
+    inventory: () => call<Inventory>("GET", "/inventory"),
+    buyItem: (id: string) => call<Inventory>("POST", `/inventory/${q(id)}/buy`),
+    upgradeItem: (id: string) => call<Inventory>("POST", `/inventory/${q(id)}/upgrade`),
+    equipItem: (id: string | null) => call<Inventory>("POST", `/inventory/${id ? q(id) : "none"}/equip`),
+    /** something bought in real life ("AirPods", "running shoes"): Bulbu gets one too */
+    addRealItem: (item: string, o: { price?: number; note?: string } = {}) => call<Inventory>("POST", "/inventory/real", { item, ...o }),
+    removeRealItem: (item: string) => call<Inventory>("DELETE", `/inventory/real/${q(item)}`),
 
     // the eight Bulbus
     outfits: () => call<{ equipped: OutfitChoice; outfits: OutfitState[] }>("GET", "/outfits"),

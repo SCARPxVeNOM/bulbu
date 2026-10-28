@@ -83,7 +83,7 @@ export function newlyUnlocked(goals: Goal[], before: Activity[], after: Activity
 
 export const outfitById = (id: string | null | undefined) => OUTFITS.find(o => o.id === id);
 
-function longestRun(history: Activity[]) {
+export function longestRun(history: Activity[]) {
   const days = [...new Set(history.filter(a => PRODUCTIVE.has(a.category)).map(a => dayKey(a.at)))].sort();
   let best = 0, run = 0, prev = "";
   for (const d of days) { run = prev && dayKey(addDays(new Date(prev + "T12:00"), 1)) === d ? run + 1 : 1; best = Math.max(best, run); prev = d; }

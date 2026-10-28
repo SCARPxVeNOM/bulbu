@@ -1,0 +1,6 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": ["app.bulbu.usage.BulbuUsageModule"]
+  }
+}

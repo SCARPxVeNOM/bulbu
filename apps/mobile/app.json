@@ -1,0 +1,70 @@
+{
+  "expo": {
+    "name": "Bulbu",
+    "slug": "bulbu",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "bulbu",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#EEF3FF",
+    "ios": {
+      "bundleIdentifier": "app.bulbu.companion",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "android": {
+      "package": "app.bulbu.companion",
+      "adaptiveIcon": {
+        "backgroundColor": "#DEE7FF",
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#DEE7FF",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 180
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Bulbu listens only while you hold the mic, to log what you tell it."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Pick a Screen Time screenshot, a receipt or a meal photo for Bulbu to read.",
+          "cameraPermission": "Snap a receipt or a meal for Bulbu to read."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

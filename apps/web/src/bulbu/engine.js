@@ -378,6 +378,102 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     });
   }
   const satin = (hex, o = {}) => () => new THREE.MeshPhysicalMaterial({ color: new THREE.Color(hex), metalness: 0, ...o });
+  // terry cloth: a field of tiny raised loops (bump only, so the base colour stays clean)
+  let terryBump = null;
+  function terryTex() {
+    if (terryBump) return terryBump;
+    const size = 256, cv = document.createElement("canvas"); cv.width = cv.height = size;
+    const g = cv.getContext("2d"); g.fillStyle = "#555"; g.fillRect(0, 0, size, size);
+    let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < 2600; i++) {
+      const x = rnd() * size, y = rnd() * size, r = 2.2 + rnd() * 2.2;
+      for (const [dx, dy] of [[0, 0], [size, 0], [-size, 0], [0, size], [0, -size]]) {
+        const gr = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+        gr.addColorStop(0, "rgba(255,255,255,0.85)"); gr.addColorStop(0.6, "rgba(200,200,200,0.4)"); gr.addColorStop(1, "rgba(80,80,80,0)");
+        g.fillStyle = gr; g.beginPath(); g.arc(x + dx, y + dy, r, 0, Math.PI * 2); g.fill();
+      }
+    }
+    terryBump = new THREE.CanvasTexture(cv);
+    terryBump.wrapS = terryBump.wrapT = THREE.RepeatWrapping; terryBump.flipY = false;
+    terryBump.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    return terryBump;
+  }
+  const terryMaterial = (hex, sheenHex, emit) => new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(hex), bumpMap: terryTex(), bumpScale: 3.2, roughness: 0.96, metalness: 0,
+    sheen: 1.0, sheenColor: new THREE.Color(sheenHex), sheenRoughness: 0.7, emissive: new THREE.Color(hex), emissiveIntensity: emit });
+  // ribbed cuffs and hem: the knit's bump, without its colour
+  const ribMaterial = (hex, sheenHex = "#FF8C8C") => new THREE.MeshPhysicalMaterial({ color: new THREE.Color(hex), roughness: 0.85, metalness: 0,
+    sheen: 1.0, sheenColor: new THREE.Color(sheenHex), sheenRoughness: 0.55, emissive: new THREE.Color(hex), emissiveIntensity: 0.05 });
+  // the CHAMPION headband: red cloth with a faint woven pattern, gold lettering and crowns across the front
+  // (u runs once round the band, the front of Bulbu at u = 0.75; v runs bottom -> top)
+  function bandMaterial() {
+    const W = 4096, H = 192, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const g = cv.getContext("2d");
+    g.fillStyle = "#D9232E"; g.fillRect(0, 0, W, H);
+    let seed = 3; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    g.globalAlpha = 0.10;
+    for (let y = 6; y < H; y += 12) for (let x = (y / 12) % 2 ? 0 : 6; x < W; x += 12) { g.fillStyle = rnd() > 0.5 ? "#7A0C14" : "#FF6B6B"; g.fillRect(x, y, 4, 4); }
+    g.globalAlpha = 1;
+    g.fillStyle = "rgba(120,10,20,0.35)"; g.fillRect(0, 0, W, 10); g.fillRect(0, H - 10, W, 10);   // hemmed edges
+    const cx = 0.75 * W, cy = H / 2 + 4;
+    const gold = g.createLinearGradient(0, cy - 60, 0, cy + 60);
+    gold.addColorStop(0, "#FFF0A8"); gold.addColorStop(0.45, "#FFD45C"); gold.addColorStop(1, "#E39A1E");
+    g.font = "900 118px 'Arial Black', 'Helvetica Neue', Arial, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.lineJoin = "round"; g.lineWidth = 10; g.strokeStyle = "rgba(110,20,10,0.55)";
+    g.strokeText("CHAMPION", cx, cy); g.fillStyle = gold; g.fillText("CHAMPION", cx, cy);
+    const tw = g.measureText("CHAMPION").width;
+    const crown = (x, y, s) => {
+      g.beginPath(); g.moveTo(x - s, y + s * 0.6); g.lineTo(x - s, y - s * 0.45); g.lineTo(x - s * 0.5, y); g.lineTo(x, y - s * 0.75);
+      g.lineTo(x + s * 0.5, y); g.lineTo(x + s, y - s * 0.45); g.lineTo(x + s, y + s * 0.6); g.closePath();
+      g.lineWidth = 8; g.stroke(); g.fillStyle = gold; g.fill();
+      [-1, 0, 1].forEach(k => { g.beginPath(); g.arc(x + k * s, y - (k ? s * 0.45 : s * 0.75) - s * 0.12, s * 0.14, 0, 7); g.fill(); });
+    };
+    crown(cx - tw / 2 - 90, cy, 44); crown(cx + tw / 2 + 90, cy, 44);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = false;
+    tex.wrapS = THREE.RepeatWrapping; tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    return new THREE.MeshPhysicalMaterial({ map: tex, roughness: 0.72, metalness: 0, sheen: 1.0, sheenColor: new THREE.Color("#FF9A8A"), sheenRoughness: 0.45,
+      emissive: new THREE.Color("#ffffff"), emissiveMap: tex, emissiveIntensity: 0.10 });
+  }
+  // the laptop's screen: an editor with code being typed, line by line (only drawn while Techie is on)
+  let screen = null;
+  function codeScreen() {
+    if (screen) return screen;
+    const W = 512, H = 320, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const g = cv.getContext("2d"), tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = false;
+    const COLS = ["#7FDBFF", "#FF7AB6", "#FFD866", "#A9E34B", "#C3A6FF", "#E8ECF8"];
+    let seed = 5; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const newLine = () => { const indent = Math.floor(rnd() * 3) * 22, toks = []; let x = 0, n = 2 + Math.floor(rnd() * 4);
+      for (let i = 0; i < n; i++) { const w = 18 + rnd() * 60; toks.push([x, w, COLS[Math.floor(rnd() * COLS.length)]]); x += w + 10; }
+      return { indent, toks, len: x }; };
+    const lines = [newLine()]; let typed = 0, acc = 0;
+    const LH = 24, TOP = 34, MAXL = Math.floor((H - TOP - 10) / LH);
+    function draw(blink) {
+      g.fillStyle = "#0E1630"; g.fillRect(0, 0, W, H);
+      g.fillStyle = "#18223F"; g.fillRect(0, 0, W, 22);
+      ["#FF6B6B", "#FFD166", "#5BD68C"].forEach((c, i) => { g.fillStyle = c; g.beginPath(); g.arc(14 + i * 16, 11, 5, 0, 7); g.fill(); });
+      g.fillStyle = "#5FE9FF"; g.font = "bold 13px monospace"; g.fillText("</> bulbu.js", 70, 15);
+      const first = Math.max(0, lines.length - MAXL);
+      lines.slice(first).forEach((ln, i) => {
+        const y = TOP + i * LH, cur = first + i === lines.length - 1;
+        g.fillStyle = "#3A4670"; g.fillRect(10, y + 6, 18, 6);
+        ln.toks.forEach(([x, w, c]) => { const vis = cur ? Math.min(w, Math.max(0, typed - x)) : w;
+          if (vis > 0) { g.fillStyle = c; g.globalAlpha = 0.92; g.fillRect(42 + ln.indent + x, y + 4, vis, 10); g.globalAlpha = 1; } });
+        if (cur && blink) { g.fillStyle = "#FFFFFF"; g.fillRect(42 + ln.indent + Math.min(typed, ln.len), y + 1, 3, 16); }
+      });
+      tex.needsUpdate = true;
+    }
+    draw(true);
+    // speed: characters (pixels) per second; 0 pauses typing
+    function update(dt, t, speed) {
+      acc += dt; if (acc < 0.08) return; const step = acc; acc = 0;
+      if (speed > 0) { typed += speed * step; const ln = lines[lines.length - 1];
+        if (typed > ln.len + 20) { lines.push(newLine()); typed = 0; if (lines.length > 60) lines.splice(0, lines.length - 30); } }
+      draw(Math.sin(t * 7) > 0);
+    }
+    screen = { tex, update };
+    return screen;
+  }
   const BELT = satin(PALETTE.belt, { roughness: 0.45, sheen: 0.5, sheenColor: new THREE.Color("#ffffff"), sheenRoughness: 0.5, clearcoat: 0.15, clearcoatRoughness: 0.4 });
   const GEM = hex => satin(hex, { roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05, emissive: new THREE.Color(hex), emissiveIntensity: 0.08 });
   const HAND = satin(PALETTE.hand, { roughness: 0.22, clearcoat: 0.8, clearcoatRoughness: 0.12, sheen: 0.5, sheenColor: new THREE.Color(PALETTE.handShade), sheenRoughness: 0.4,
@@ -394,6 +490,36 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     Sweater_Knit: () => knitMaterial(),
     Sweater_Rib:  satin("#FFF4E4", { roughness: 0.9, sheen: 1.0, sheenColor: new THREE.Color("#FFFFFF"), sheenRoughness: 0.6, emissive: new THREE.Color("#FFF1DE"), emissiveIntensity: 0.06 }),
     Sweater_Star: satin("#FFE070", { roughness: 0.8, sheen: 1.0, sheenColor: new THREE.Color("#FFF6C8"), sheenRoughness: 0.5, emissive: new THREE.Color("#FFD84A"), emissiveIntensity: 0.10 }),
+    // fit: soft terry sweatband + wristbands (white with a purple stripe), a glossy purple dumbbell
+    Fit_Terry:  () => terryMaterial("#FBF8FF", "#FFFFFF", 0.06),
+    Fit_Stripe: () => terryMaterial("#7A55E6", "#C9B6FF", 0.10),
+    Fit_Plate:  satin("#7452E4", { roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.06, sheen: 0.4, sheenColor: new THREE.Color("#C8B4FF"), emissive: new THREE.Color("#5B3BD0"), emissiveIntensity: 0.12 }),
+    Fit_Track:      satin("#7B57E8", { roughness: 0.48, sheen: 1.0, sheenColor: new THREE.Color("#C9B6FF"), sheenRoughness: 0.45, clearcoat: 0.15, clearcoatRoughness: 0.5, emissive: new THREE.Color("#6A48E0"), emissiveIntensity: 0.08 }),
+    Fit_TrackDark:  satin("#5C3DCB", { roughness: 0.52, sheen: 1.0, sheenColor: new THREE.Color("#B7A2FF"), sheenRoughness: 0.45, clearcoat: 0.12, clearcoatRoughness: 0.5, emissive: new THREE.Color("#4F33BD"), emissiveIntensity: 0.08 }),
+    Fit_TrackWhite: satin("#FFFFFF", { roughness: 0.45, sheen: 0.6, sheenColor: new THREE.Color("#FFFFFF"), sheenRoughness: 0.5, emissive: new THREE.Color("#F4F0FF"), emissiveIntensity: 0.10 }),
+    Fit_TrackRib:   () => ribMaterial("#6646D6", "#C9B6FF"),
+    Fit_Zip:        satin("#DCDDE6", { metalness: 0.85, roughness: 0.22 }),
+    Fit_Bar:    satin("#EEEAF6", { metalness: 0.45, roughness: 0.22, clearcoat: 0.8, clearcoatRoughness: 0.1, emissive: new THREE.Color("#F2EEFF"), emissiveIntensity: 0.05 }),
+    // techie: red hoodie, cream cords, silver tips, black frames, a space-grey laptop
+    Techie_Fabric: satin("#E2262E", { roughness: 0.78, sheen: 1.0, sheenColor: new THREE.Color("#FF9C9C"), sheenRoughness: 0.5, emissive: new THREE.Color("#E2262E"), emissiveIntensity: 0.06 }),
+    Techie_Rib:    () => ribMaterial("#C71C26"),
+    Techie_Cord:   satin("#F4ECE4", { roughness: 0.6, sheen: 0.8, sheenColor: new THREE.Color("#FFFFFF"), sheenRoughness: 0.5 }),
+    Techie_Metal:  satin("#D9DCE6", { metalness: 0.85, roughness: 0.22 }),
+    Techie_Frame:  satin("#1C1A24", { roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.08 }),
+    Techie_Laptop: satin("#8C91A0", { metalness: 0.72, roughness: 0.3, clearcoat: 0.4, clearcoatRoughness: 0.2 }),
+    Techie_Keys:   satin("#262933", { roughness: 0.6 }),
+    Techie_Pad:    satin("#A6ABB8", { metalness: 0.55, roughness: 0.28 }),
+    Techie_Bezel:  satin("#111218", { roughness: 0.18, clearcoat: 0.8, clearcoatRoughness: 0.05 }),
+    // neon: unlit and a touch over-bright so it reads as glowing (the halo pass is kept for the bulb)
+    // champion: red fabric with a cream trim, polished gold
+    Champ_Band:      () => bandMaterial(),
+    Champ_Red:       satin("#D9232E", { roughness: 0.72, sheen: 1.0, sheenColor: new THREE.Color("#FF9A8A"), sheenRoughness: 0.45, emissive: new THREE.Color("#C81E2A"), emissiveIntensity: 0.07, side: THREE.DoubleSide }),
+    Champ_RedInner:  satin("#B11824", { roughness: 0.8, sheen: 0.8, sheenColor: new THREE.Color("#FF8A80"), sheenRoughness: 0.5, emissive: new THREE.Color("#9E1520"), emissiveIntensity: 0.06 }),
+    Champ_Cream:     satin("#FBEBD3", { roughness: 0.7, sheen: 1.0, sheenColor: new THREE.Color("#FFFFFF"), sheenRoughness: 0.5, emissive: new THREE.Color("#FBEBD3"), emissiveIntensity: 0.06 }),
+    Champ_Gold:      satin("#FFC447", { metalness: 0.9, roughness: 0.22, clearcoat: 0.8, clearcoatRoughness: 0.1, emissive: new THREE.Color("#D99A22"), emissiveIntensity: 0.32 }),
+    Champ_GoldLight: satin("#FFE07A", { metalness: 0.9, roughness: 0.18, clearcoat: 0.8, clearcoatRoughness: 0.08, emissive: new THREE.Color("#E8B030"), emissiveIntensity: 0.38 }),
+    Techie_Glow:   () => new THREE.MeshBasicMaterial({ color: new THREE.Color("#5FE9FF").multiplyScalar(1.15), toneMapped: false }),
+    Techie_Screen: () => new THREE.MeshBasicMaterial({ map: codeScreen().tex, toneMapped: false, side: THREE.DoubleSide }),
   };
   const LIMB = satin(PALETTE.limbs, { roughness: 0.34, clearcoat: 0.35, clearcoatRoughness: 0.3, sheen: 1.0, sheenColor: new THREE.Color(PALETTE.limbSheen), sheenRoughness: 0.4,
                                       emissive: new THREE.Color(PALETTE.limbs), emissiveIntensity: 0.16 });
@@ -408,13 +534,26 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   //  both outfits' sleeves share one axis, one skin and the identical white ball hand, so every animation fits them all.
   //  sweater: knit body, rib collar, hem, sleeves, cuffs and its own copy of the ball hands.
   //  hoodie:  the star hoodie (hood lying on the back, slim neckline), lavender cuffs and the same hands; sneakers replace the feet.
+  //  fit:     purple track jacket + track pants (belt and gems on show), terry sweatband and wristbands, a dumbbell in
+  //           the right hand; its activity is "Curl".
+  //  techie:  red </> hoodie, glasses, and a laptop on its own bone (prop.R); its activity is "Type".
+  //  An outfit with an activity plays it as Bulbu's motion (emotes still change the face and the glow), and shows the
+  //  focused brows from the art.
   const OUTFITS = {
     sweater: { match: /^Sweater_/, covers: ["Body", "Belt", "Gems", "Arm.L", "Arm.R", "Shoulder.L", "Shoulder.R"] },
     hoodie:  { match: /^Outfit_/,  covers: ["Body", "Belt", "Gems", "Foot.L", "Foot.R", "Arm.L", "Arm.R", "Shoulder.L", "Shoulder.R"] },
+    fit:     { match: /^Fit_/,     covers: ["Arm.L", "Arm.R", "Shoulder.L", "Shoulder.R"], activity: "Curl", brows: true },
+    techie:  { match: /^Techie_/,  covers: ["Body", "Belt", "Gems", "Arm.L", "Arm.R", "Shoulder.L", "Shoulder.R"], activity: "Type", brows: true },
+    // champ: CHAMPION headband with fluttering ribbon tails, a red cape, gold medallion and shoulder rings, and a gold
+    // trophy hoisted in the right hand; its activity is "Champion" and its happy face has a big open smile
+    champ:   { match: /^Champ_/,   covers: [], activity: "Champion", brows: true, happyMouth: { Open: 1 } },
   };
-  const outfitNodes = { sweater: [], hoodie: [] };
+  const outfitNodes = Object.fromEntries(Object.keys(OUTFITS).map(k => [k, []]));
+  const activity = () => (outfit && OUTFITS[outfit].activity && actions[OUTFITS[outfit].activity]) ? OUTFITS[outfit].activity : null;
   let outfit = "sweater";
-  const normOutfit = v => v === true ? "sweater" : (v && OUTFITS[v]) ? v : null;
+  // the app's Bulbu ids map onto the 3D outfits ("tech" is Techie Bulbu)
+  const OUTFIT_ALIAS = { tech: "techie", champion: "champ" };
+  const normOutfit = v => { if (v === true) return "sweater"; v = OUTFIT_ALIAS[v] || v; return (v && OUTFITS[v]) ? v : null; };
   function setOutfit(v) {
     outfit = normOutfit(v);
     const covered = new Set(outfit ? OUTFITS[outfit].covers : []);
@@ -422,6 +561,10 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     // three.js strips dots from node names on load ("Arm.L" -> "ArmL"), so look both up
     const all = new Set(Object.values(OUTFITS).flatMap(o => o.covers));
     all.forEach(n => { const o = nodes[n] || nodes[n.replace(/\./g, "")]; if (o) o.visible = !covered.has(n); });
+    if (!mixer) return;
+    // re-apply the emote: the outfit's face (brows, mouth) and its activity, which takes over the motion; taking the
+    // outfit off returns to the emote's own motion
+    if (emote) setEmote(emote);
   }
   const SLEEP_HIDE = ["Eyes_Closed", "Eyes_Squeeze", "Eye_Stars", "Brows_Focused", "Brows_Drained", ...FX];
   const target = { morph: {}, center: new THREE.Color(), edge: new THREE.Color(), stops: Array.from({ length: 7 }, () => new THREE.Color()),
@@ -484,6 +627,9 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
       if (nodes.Eyes) nodes.Eyes.visible = e.eyes === "open";
       (mats["Eye_Heart"] || []).forEach(o => { o.visible = e.hearts; });
       PARTS.forEach(p => { const n = partNode(p); if (n) n.visible = e.parts.includes(p); });
+      if (outfit && OUTFITS[outfit].brows && e.eyes === "open" && !e.parts.includes("Brows_Drained")) {
+        const b = partNode("Brows_Focused"); if (b) b.visible = true;
+      }
     }
   }
 
@@ -556,6 +702,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     emote = name;
     const keys = { Blink: 0, Sleepy: 0, Small: 0, Frown: 0, Wavy: 0, Open: 0, Fil_Focus: 0, Fil_Drained: 0, Fil_Zigzag: 0 };
     Object.assign(keys, e.eyeKeys, e.mouth); if (e.filamentShape) keys[e.filamentShape] = 1;
+    if (name === "happy" && outfit && OUTFITS[outfit].happyMouth) Object.assign(keys, OUTFITS[outfit].happyMouth);
     target.morph = keys;
     const g = e.live || {};   // calibrated values for this renderer (see project/calibrate.py); fall back to the art's colours
     target.center.copy(col(g.center || e.viewCenter));
@@ -575,7 +722,8 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
       U.cz.value = target.cz; U.spreadMin.value = target.smin; U.spreadMax.value = target.smax;
       U.bodyTint.value.copy(target.center);
     }
-    const [anim, speed] = MOTION[name];
+    const [anim0, speed0] = MOTION[name], act = activity();
+    const anim = act || anim0, speed = act ? 1 : speed0;
     baseAnim = anim; setSpeed(anim, speed);
     play(anim, 0.35, true);
     onEmote && onEmote(name);
@@ -588,6 +736,11 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   function setSpeed(name, v) { if (actions[name]) actions[name].timeScale = v; }
   let playing = "Idle";
   function play(name, fade = 0.35, fromEmote = false) {
+    const act = activity();
+    if (act && name !== act) {            // holding a prop: keep doing the activity (only the sleepy face follows)
+      if (!fromEmote) { const s = name === "Sleepy"; if (s !== sleeping) { sleeping = s; applyFace(); } }
+      name = act; fromEmote = true;
+    }
     const next = clip(name); if (!next) return;
     if (!fromEmote) {
       const s = name === "Sleepy";
@@ -615,7 +768,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     ray.setFromCamera(ndc, camera);
     if (ray.intersectObject(model, true).length) poke();
   });
-  function poke() { popT = 0; play("Wave"); onPoke && onPoke(); }
+  function poke() { popT = 0; if (!activity()) play("Wave"); onPoke && onPoke(); }
 
   // ------------------------------------------------------------ loop
   const clock = new THREE.Clock();
@@ -631,6 +784,11 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     if (stageUpdate) stageUpdate(dt, t);
     if (!model) { renderFrame(); return; }
     if (!frozen) mixer.update(dt);
+    if (screen && outfit === "techie") {
+      // type while the hands are on the keys (the typing part of the clip), pause while carrying
+      const a = actions.Type, tt = a ? a.time : 0;
+      screen.update(dt, t, motion && tt > 2.5 && tt < 11.3 ? 260 : 0);
+    }
     const k = 1 - Math.exp(-dt * 7);
     sleepAmt += ((sleeping ? 1 : 0) - sleepAmt) * (1 - Math.exp(-dt * 3));
     const faceTarget = sleeping ? { ...target.morph, Blink: 0, Sleepy: 0, Small: 0.55, Frown: 0.45, Wavy: 0, Open: 0 } : target.morph;
@@ -725,7 +883,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     // stop rendering while Bulbu is off-screen (saves battery on phones)
     set paused(v) { paused = !!v; }, get paused() { return paused; },
     setView(pos, target) { camera.position.set(...pos); controls.target.set(...target); controls.update(); },
-    set interactive(v) { controls.enabled = !!v; }, get interactive() { return controls.enabled; }, debug: { mix: mixPass.uniforms, nodes, mats },
+    set interactive(v) { controls.enabled = !!v; }, get interactive() { return controls.enabled; }, debug: { mix: mixPass.uniforms, nodes, mats, actions },
     // test hooks: hold the rig still and project a model-space point to the screen
     freeze(v = true) { frozen = v; if (v && actions[baseAnim]) { mixer.stopAllAction(); model.traverse(o => { if (o.isBone && o.userData.rest) { o.position.copy(o.userData.rest[0]); o.quaternion.copy(o.userData.rest[1]); o.scale.copy(o.userData.rest[2]); } }); } },
     toScreen(x, y, z) {

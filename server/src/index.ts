@@ -1,10 +1,13 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { classifyApp, insights, outfitById, outfitStates, type AppKind, type GoalTemplate } from "@bulbu/engine";
+import { addRealItem, buyItem, classifyApp, insights, inventory, NEW_WORLD, outfitStates, upgradeItem, worldState, type AppKind, type GoalTemplate, type WorldSave } from "@bulbu/engine";
+
+const STARTER_LIGHT = 100;
 import { store, uid, type Fact, type User } from "./db.ts";
 import { makeGoal } from "./goals.ts";
 import { seed, seedIfEmpty, DEMO_USERS } from "./seed.ts";
@@ -15,6 +18,10 @@ import { ingestUsage, type UsageInput } from "./usage.ts";
 seedIfEmpty();
 const app = new Hono<{ Variables: { uid: string } }>();
 
+// Expo web (the mobile app running in a browser) calls the API from another port. Phones send no Origin and need no CORS.
+// Only local and private-network pages are allowed, since profiles here are keyed by x-user-id alone.
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/;
+app.use("/api/*", cors({ origin: o => LOCAL_ORIGIN.test(o) ? o : null, allowHeaders: ["content-type", "x-user-id"], allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"] }));
 app.onError((err, c) => { console.error(err); return c.json({ error: err.message }, 500); });
 app.get("/api/health", c => c.json({ ok: true, ai: ai.enabled, models: ai.models }));
 
@@ -22,7 +29,7 @@ app.get("/api/health", c => c.json({ ok: true, ai: ai.enabled, models: ai.models
 app.get("/api/users", c => c.json(store.users().map(u => ({ id: u.id, name: u.name, demo: !!u.demo }))));
 app.post("/api/users", async c => {
   const b = await c.req.json<{ name: string; goals: { template: GoalTemplate; title?: string; target?: number; baseline?: number }[] }>();
-  const user: User = { id: uid("u_"), name: (b.name || "Friend").trim().slice(0, 40), createdAt: new Date().toISOString(), outfit: null, theme: "sky" };
+  const user: User = { id: uid("u_"), name: (b.name || "Friend").trim().slice(0, 40), createdAt: new Date().toISOString(), outfit: "sweater", theme: "sky" };
   store.putUser(user);
   b.goals.forEach((g, i) => store.putGoal(user.id, makeGoal(g.template, { ...(g.title && { title: g.title }), ...(g.target && { target: g.target }), baseline: g.baseline ?? 0, primary: i === 0 })));
   return c.json(user);
@@ -119,6 +126,53 @@ app.delete("/api/apps/:name", c => {
   return c.json(rest);
 });
 
+// Bulbu World: level, XP, Light, streak, and Bulbu's inventory
+const save = (id: string) => store.user(id)!.world ?? NEW_WORLD;
+const invOf = (id: string) => inventory(store.goals(id), store.activities(id), save(id), store.user(id)!.outfit, new Date());
+const keep = (id: string, r: { save: WorldSave } | { error: string }) => {
+  if ("error" in r) return r;
+  store.putUser({ ...store.user(id)!, world: r.save });
+  return null;
+};
+app.get("/api/world", c => c.json(worldState(store.goals(c.get("uid")), store.activities(c.get("uid")), save(c.get("uid")), new Date())));
+app.get("/api/inventory", c => c.json(invOf(c.get("uid"))));
+app.post("/api/inventory/:id/buy", c => {
+  const id = c.get("uid"), err = keep(id, buyItem(store.goals(id), store.activities(id), save(id), c.req.param("id"), new Date()));
+  return err ? c.json(err, 400) : c.json(invOf(id));
+});
+app.post("/api/inventory/:id/upgrade", c => {
+  const id = c.get("uid"), err = keep(id, upgradeItem(store.goals(id), store.activities(id), save(id), c.req.param("id"), new Date()));
+  return err ? c.json(err, 400) : c.json(invOf(id));
+});
+app.post("/api/inventory/:id/equip", c => {
+  const id = c.get("uid"), u = store.user(id)!, want = c.req.param("id");
+  if (want === "none") { store.putUser({ ...u, outfit: null }); return c.json(invOf(id)); }
+  const it = invOf(id).items.find(i => i.id === want);
+  if (!it) return c.json({ error: `Unknown item "${want}"` }, 400);
+  if (!it.owned) return c.json({ error: `${it.name} is still locked. ${it.detail}.` }, 403);
+  store.putUser({ ...u, outfit: it.outfit ?? it.id });
+  return c.json(invOf(id));
+});
+// real-life purchases: "I bought headphones" -> Bulbu gets headphones
+app.post("/api/inventory/real", async c => {
+  const id = c.get("uid"), b = await c.req.json<{ item: string; price?: number; note?: string }>();
+  const err = keep(id, addRealItem(save(id), String(b.item ?? ""), new Date(), { price: Number(b.price) || undefined, note: b.note?.slice(0, 120) }));
+  return err ? c.json(err, 400) : c.json(invOf(id));
+});
+app.delete("/api/inventory/real/:item", c => {
+  const id = c.get("uid"), w = save(id), u = store.user(id)!, item = c.req.param("item");
+  // taking it out of the inventory also takes it off Bulbu
+  store.putUser({ ...u, ...(u.outfit === item && { outfit: "sweater" }), world: { ...w, real: (w.real ?? []).filter(r => r.item !== item) } });
+  return c.json(invOf(id));
+});
+// Bulbu's tour: save the step; the starter gift is given once
+app.post("/api/world/tutorial", async c => {
+  const id = c.get("uid"), u = store.user(id)!, { step, gift } = await c.req.json<{ step: number; gift?: boolean }>();
+  const w = save(id);
+  store.putUser({ ...u, world: { ...w, tutorial: Number.isFinite(step) ? Math.max(-1, Math.floor(step)) : w.tutorial, gift: gift && w.gift === 0 ? STARTER_LIGHT : w.gift } });
+  return c.json(worldState(store.goals(id), store.activities(id), save(id), new Date()));
+});
+
 // the eight Bulbus: progress toward each, and which one is worn
 app.get("/api/outfits", c => {
   const id = c.get("uid");
@@ -164,14 +218,12 @@ if (fs.existsSync(dist)) {
 }
 
 function normApp(s: string) { return decodeURIComponent(s).trim().toLowerCase().replace(/\s+/g, " "); }
-/** null when the user may wear this outfit, otherwise the reason they can't (yet) */
+/** null when the user may wear this outfit, otherwise the reason they can't (yet). Outfits come from the inventory. */
 function outfitLock(userId: string, id: string | null): string | null {
-  if (id === null || id === "sweater") return null;
-  // the star hoodie has always been the 7-day-streak reward, the same unlock as ChampBulbu
-  const def = outfitById(id === "hoodie" ? "champ" : id);
-  if (!def) return `Unknown outfit "${id}"`;
-  const st = outfitStates(store.goals(userId), store.activities(userId), new Date()).find(o => o.id === def.id)!;
-  return st.unlocked ? null : `${def.name} is still locked: ${st.detail}`;
+  if (id === null) return null;
+  const it = invOf(userId).items.find(i => i.id === id || i.outfit === id);
+  if (!it) return `Unknown outfit "${id}"`;
+  return it.owned ? null : `${it.name} is still locked. ${it.detail}.`;
 }
 
 // Nightly reflection: once per user per night, between 2 and 4 AM server time, Muse Wonder reads the month and writes

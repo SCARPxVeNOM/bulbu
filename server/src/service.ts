@@ -1,6 +1,6 @@
 // What the app does: snapshot, log, chat, what-if, reflect, nudges. Engine for numbers, models for words and Bulbu's body.
 import {
-  achievements, addDays, allImpacts, classifyApp, costGoal, newlyUnlocked, outfitById, outfitStates, dayKey, fmtDays, fmtMinutes, fmtMoney, forecast, glowFor, impactsOf, insights,
+  achievements, addDays, allImpacts, inventory, lightOf, NEW_WORLD, worldState, classifyApp, costGoal, newlyUnlocked, outfitById, outfitStates, dayKey, fmtDays, fmtMinutes, fmtMoney, forecast, glowFor, impactsOf, insights,
   level, patterns, progressSeries, reactionFor, simulate, streak, swapFor, typicalOrder,
   type Activity, type Category, type Change, type Emote, type Forecast, type Goal, type Impact, type WhatIf,
 } from "@bulbu/engine";
@@ -46,6 +46,8 @@ export function snapshot(userId: string, now = new Date()) {
     week, glow, emote, patterns: patterns(acts, now), facts,
     nudges: nudges(user, goals, acts, facts, now), achievements: achievements(goals, acts, now),
     outfits: outfitStates(goals, acts, now), letter: user.letter ?? null,
+    world: worldState(goals, acts, user.world ?? NEW_WORLD, now),
+    inventory: inventory(goals, acts, user.world ?? NEW_WORLD, user.outfit, now),
     ai: { enabled: ai.enabled, models: ai.models }, now: now.toISOString(),
   };
 }
@@ -167,7 +169,14 @@ export async function log(userId: string, input: LogInput, now = new Date()) {
   const bulbu = await reactWithSpark(user, impacts, added, fallback);
   store.putUser({ ...user, mood: { emote: bulbu.emote, at: now.toISOString() } });
   const unlocked = newlyUnlocked(goals, history, after, now);
-  return { activities: added, impacts, swap, questions: parsed.questions, forecasts, completed, bulbu, via, unlocked };
+  // Light this log made for Bulbu World, and the world level before/after (for the level-up moment)
+  const light = added.reduce((s, a) => s + lightOf(a), 0);
+  const save = store.user(userId)?.world ?? NEW_WORLD;
+  const lv = { before: worldState(goals, history, save, now).level, after: worldState(goals, after, save, now).level };
+  // things this log unlocked in the inventory (a new level or a streak)
+  const had = new Set(inventory(goals, history, save, null, now).items.filter(i => i.owned).map(i => i.id));
+  const items = inventory(goals, after, save, null, now).items.filter(i => i.owned && !had.has(i.id)).map(i => ({ id: i.id, name: i.name }));
+  return { activities: added, impacts, swap, questions: parsed.questions, forecasts, completed, bulbu, via, unlocked, light, worldLevel: lv, items };
 }
 
 // ------------------------------------------------------------------ what-if

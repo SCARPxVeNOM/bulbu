@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Activity, AppKind, Goal } from "@bulbu/engine";
+import type { Activity, AppKind, Goal, WorldSave } from "@bulbu/engine";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const file = process.env.BULBU_DB ?? path.resolve(here, "../data/bulbu.db");
@@ -28,6 +28,8 @@ export interface User {
   /** last nightly reflection, and the note from it */
   reflectedAt?: string;
   letter?: { text: string; at: string };
+  /** Bulbu World: what was built and spent (everything else is computed from the ledger) */
+  world?: WorldSave;
   /** the last reaction, so Bulbu looks the same when the app reopens */
   mood?: { emote: string; at: string };
   /** nudge kinds the user dismissed, so Bulbu sends fewer of them */
