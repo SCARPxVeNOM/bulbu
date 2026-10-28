@@ -111,6 +111,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
         float face = texture2D(maskTexture, vUv).g;
         halo += filTint * max(max(fg.r, fg.g), fg.b) * filPower;
         halo *= 1.0 - 0.92 * face;   // no glow over the eyes, mouth and face lines
+        halo *= 1.0 - texture2D(maskTexture, vUv).b;   // or over something Bulbu holds: it stays solid
         gl_FragColor = vec4(1.0 - (1.0 - b.rgb) * (1.0 - clamp(halo, 0.0, 1.0)), b.a); }`
   }), "baseTexture");
   // full-resolution, antialiased mask: it lines up pixel for pixel with the picture, so the halo stops exactly at
@@ -118,6 +119,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   const maskRT = new THREE.WebGLRenderTarget(256, 256, { samples: 4 });
   const maskMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });       // R = Bulbu's silhouette
   const maskFaceMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });   // G = face features (eyes, mouth, lines)
+  const maskGearMat = new THREE.MeshBasicMaterial({ color: 0xff00ff });   // B = a held item (no glow over it at all)
   const faceMeshes = new Set(), maskSaved = new Map();
   mixPass.uniforms.maskTexture = { value: maskRT.texture };
   const filComposer = new EffectComposer(renderer); filComposer.renderToScreen = false;
@@ -178,7 +180,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     noBloom.forEach(o => { o.visible = o.userData.bv; });
     // silhouette mask
     noMask.forEach(o => { o.userData.mv = o.visible; o.visible = false; });
-    scene.traverse(o => { if (o.isMesh && o !== shadow) { maskSaved.set(o, o.material); o.material = faceMeshes.has(o) ? maskFaceMat : maskMat; } });
+    scene.traverse(o => { if (o.isMesh && o !== shadow) { maskSaved.set(o, o.material); o.material = faceMeshes.has(o) ? maskFaceMat : o.userData.gearMesh ? maskGearMat : maskMat; } });
     scene.background = null;
     renderer.setRenderTarget(maskRT); renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(scene, camera);
     renderer.setRenderTarget(null);
@@ -577,14 +579,14 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   //   rot     its rotation there (XYZ radians): the screen faces Bulbu, the back faces you
   //   screen  material names to light up with Bulbu's own glowing wallpaper
   //   body    material names that take the colour of the user's own one (a blue iPad turns Bulbu's iPad blue)
-  //   hide    material names of extras to leave out (the iPad model comes with an Apple Pencil)
+  //   hide    material names of extras to leave out (the iPad model comes with an Apple Pencil and a glass layer)
   // The hold pose: the body from the moment in the "Type" clip where Bulbu leans in, and both arms posed (solved so
   // each hand lands on a side edge of the item: right hand at (-0.21, 0.54, 0.63), left at (0.28, 0.55, 0.49)).
   // Bulbu's arms are short and its bulb is wide, so the item sits just in front of the hands, below the face.
   const GEAR = {
     iphone: { size: 0.56, at: [0.035, 0.57, 0.56], rot: [0.55, Math.PI + 0.32, Math.PI / 2], screen: /screen/i,
               body: /^COLOUR_Cherry_(Backpanel|Side_Panel|Side_Panel_Gloss|Antenna|Aniso|Aniso_0|Plastic|Apple|Side_Button_Detail)$/ },
-    ipad:   { size: 0.62, at: [0.035, 0.63, 0.55], rot: [0.25, Math.PI + 0.32, 0], screen: /^screen$/i, flipScreen: true, body: /^Body$/, hide: /^apple_pencil/ },
+    ipad:   { size: 0.6, at: [0.035, 0.585, 0.56], rot: [0.25, Math.PI + 0.32, 0], screen: /^screen$/i, flipScreen: true, body: /^Body$/, hide: /^(apple_pencil|glass$)/ },
   };
   const HOLD = { clip: "Type", at: 2.0, D: 5.2, ease: 0.55, arms: {
     "arm_bare.R": [-0.6774, 0.2044, 0.6449, -0.2889], "fore_bare.R": [0.2579, -0.0019, 0.3072, 0.916],
@@ -619,7 +621,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     scene.position.sub(mid); inner.add(scene); inner.scale.setScalar(k);
     scene.traverse(o => {
       if (!o.isMesh) return;
-      o.frustumCulled = false; o.userData.noMask = true;
+      o.frustumCulled = false; o.userData.gearMesh = true;
       const ms = Array.isArray(o.material) ? o.material : [o.material];
       if (def.screen && ms.some(m => def.screen.test(m.name || ""))) o.material = wallpaper(!!def.flipScreen);
       else if (def.body) ms.forEach(m => { if (def.body.test(m.name || "") && m.color) { m.userData.base = m.color.clone(); body.push(m); } });
@@ -714,7 +716,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     // Bulbu turns toward it, tips its head down to look, and its eyes go soft and happy
     model.rotation.y = 0.2 * holdW;
     if (headBone) {
-      eLook.set(0.2 * holdW, 0.22 * holdW, -0.06 * holdW); qLook.setFromEuler(eLook);
+      eLook.set(0.08 * holdW, 0.2 * holdW, -0.05 * holdW); qLook.setFromEuler(eLook);
       headBone.quaternion.multiply(qLook);
     }
     squint = 0.38 * holdW;
