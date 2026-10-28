@@ -581,16 +581,17 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   //   body    material names that take the colour of the user's own one (a blue iPad turns Bulbu's iPad blue)
   //   hide    material names of extras to leave out (the iPad model comes with an Apple Pencil and a glass layer)
   // The hold pose: the body from the moment in the "Type" clip where Bulbu leans in, and both arms posed (solved so
-  // each hand lands on a side edge of the item: right hand at (-0.21, 0.54, 0.63), left at (0.28, 0.55, 0.49)).
+  // each visible hand, i.e. the skinned hand mesh, lands on a side edge of the item: right at (-0.23, 0.53, 0.42),
+  // left at (0.27, 0.52, 0.47)).
   // Bulbu's arms are short and its bulb is wide, so the item sits just in front of the hands, below the face.
   const GEAR = {
-    iphone: { size: 0.56, at: [0.035, 0.57, 0.56], rot: [0.55, Math.PI + 0.32, Math.PI / 2], screen: /screen/i,
+    iphone: { size: 0.5, at: [0.02, 0.53, 0.47], rot: [0.5, Math.PI - 0.09, Math.PI / 2], screen: /screen/i,
               body: /^COLOUR_Cherry_(Backpanel|Side_Panel|Side_Panel_Gloss|Antenna|Aniso|Aniso_0|Plastic|Apple|Side_Button_Detail)$/ },
-    ipad:   { size: 0.6, at: [0.035, 0.585, 0.56], rot: [0.25, Math.PI + 0.32, 0], screen: /^screen$/i, flipScreen: true, body: /^Body$/, hide: /^(apple_pencil|glass$)/ },
+    ipad:   { size: 0.54, at: [0.02, 0.55, 0.47], rot: [0.3, Math.PI - 0.09, 0], screen: /^screen$/i, flipScreen: true, body: /^Body$/, hide: /^(apple_pencil|glass$)/ },
   };
   const HOLD = { clip: "Type", at: 2.0, D: 5.2, ease: 0.55, arms: {
-    "arm_bare.R": [-0.6774, 0.2044, 0.6449, -0.2889], "fore_bare.R": [0.2579, -0.0019, 0.3072, 0.916],
-    "arm_bare.L": [0.5252, 0.3524, 0.6974, 0.3369], "fore_bare.L": [-0.029, -0.2559, -0.1992, 0.9455],
+    "arm_bare.R": [-0.4645, 0.1702, 0.7738, -0.3956], "fore_bare.R": [0.096, 0.0774, 0.2519, 0.9599],
+    "arm_bare.L": [0.5752, 0.3554, 0.6993, 0.2319], "fore_bare.L": [-0.2069, -0.2453, -0.1835, 0.9292],
   } };
   const holdQ = Object.fromEntries(Object.entries(HOLD.arms).map(([k, q]) => [k, new THREE.Quaternion(...q).normalize()]));
   const HAND_PROPS = ["Champ_Trophy", "Fit_Dumbbell", "Techie_Laptop", "Techie_Laptop_Logo"];
