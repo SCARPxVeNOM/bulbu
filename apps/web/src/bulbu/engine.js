@@ -580,18 +580,19 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   //   screen  material names to light up with Bulbu's own glowing wallpaper
   //   body    material names that take the colour of the user's own one (a blue iPad turns Bulbu's iPad blue)
   //   hide    material names of extras to leave out (the iPad model comes with an Apple Pencil and a glass layer)
-  // The hold pose: the body from the moment in the "Type" clip where Bulbu leans in, and both arms posed (solved so
-  // each visible hand, i.e. the skinned hand mesh, lands on a side edge of the item: right at (-0.23, 0.53, 0.42),
-  // left at (0.27, 0.52, 0.47)).
-  // Bulbu's arms are short and its bulb is wide, so the item sits just in front of the hands, below the face.
+  // The hold pose: the body from the moment in the "Type" clip where Bulbu leans in, with both arms brought in front
+  // (solved so each visible hand, i.e. the skinned hand mesh, lands at a side of the item: right at (-0.31, 0.55, 0.39),
+  // left at (0.30, 0.53, 0.44)). The solve keeps the upper arms close to the clip's own pose and bends at the elbows
+  // instead: turning the upper arm much further pulls the sleeve off the shoulder. The item is held sideways, just
+  // in front of the hands and below Bulbu's face (its arms are short and its bulb is wide).
   const GEAR = {
-    iphone: { size: 0.5, at: [0.02, 0.53, 0.47], rot: [0.5, Math.PI - 0.09, Math.PI / 2], screen: /screen/i,
+    iphone: { size: 0.48, at: [-0.01, 0.56, 0.46], rot: [0.4, Math.PI - 0.08, Math.PI / 2], screen: /screen/i,
               body: /^COLOUR_Cherry_(Backpanel|Side_Panel|Side_Panel_Gloss|Antenna|Aniso|Aniso_0|Plastic|Apple|Side_Button_Detail)$/ },
-    ipad:   { size: 0.54, at: [0.02, 0.55, 0.47], rot: [0.3, Math.PI - 0.09, 0], screen: /^screen$/i, flipScreen: true, body: /^Body$/, hide: /^(apple_pencil|glass$)/ },
+    ipad:   { size: 0.56, at: [-0.01, 0.56, 0.46], rot: [0.35, Math.PI - 0.08, Math.PI / 2], screen: /^screen$/i, flipScreen: true, body: /^Body$/, hide: /^(apple_pencil|glass$)/ },
   };
   const HOLD = { clip: "Type", at: 2.0, D: 5.2, ease: 0.55, arms: {
-    "arm_bare.R": [-0.4645, 0.1702, 0.7738, -0.3956], "fore_bare.R": [0.096, 0.0774, 0.2519, 0.9599],
-    "arm_bare.L": [0.5752, 0.3554, 0.6993, 0.2319], "fore_bare.L": [-0.2069, -0.2453, -0.1835, 0.9292],
+    "arm_bare.R": [-0.6932, 0.4463, 0.5583, -0.0927], "fore_bare.R": [-0.4153, -0.1176, 0.3492, 0.8317],
+    "arm_bare.L": [0.6733, 0.4434, 0.5791, 0.1211], "fore_bare.L": [-0.4562, -0.1578, -0.1438, 0.8639],
   } };
   const holdQ = Object.fromEntries(Object.entries(HOLD.arms).map(([k, q]) => [k, new THREE.Quaternion(...q).normalize()]));
   const HAND_PROPS = ["Champ_Trophy", "Fit_Dumbbell", "Techie_Laptop", "Techie_Laptop_Logo"];
