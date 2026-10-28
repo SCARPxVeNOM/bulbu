@@ -2,7 +2,8 @@
 // while they're focused, so the phone never holds more than a couple of WebGL contexts.
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import { useIsFocused } from "expo-router";
-import BulbuDom, { type BulbuView } from "./BulbuDom";
+import BulbuDom, { type BulbuView, type KingdomLabel } from "./BulbuDom";
+import type { KingdomView } from "../../../../web/src/bulbu/kingdom.js";
 import { tap } from "../ui";
 
 export interface BulbuProps {
@@ -18,6 +19,10 @@ export interface BulbuProps {
   background?: string;
   view?: BulbuView;
   world?: boolean;
+  /** Bulbu's Kingdom round Bulbu (Home), with a tappable label over each building */
+  kingdom?: KingdomView;
+  labels?: KingdomLabel[];
+  onBuilding?: (id: string) => void;
   /** keep the WebView alive while the screen is in the background (Home) */
   keepAlive?: boolean;
   interactive?: boolean;
@@ -25,7 +30,7 @@ export interface BulbuProps {
   style?: StyleProp<ViewStyle>;
 }
 
-export function Bulbu({ keepAlive = false, onPoke, style, cue, ...p }: BulbuProps) {
+export function Bulbu({ keepAlive = false, onPoke, onBuilding, style, cue, ...p }: BulbuProps) {
   const focused = useIsFocused();
   const mounted = focused || keepAlive;
   return (
@@ -33,6 +38,7 @@ export function Bulbu({ keepAlive = false, onPoke, style, cue, ...p }: BulbuProp
       {mounted && (
         <BulbuDom {...p} cue={cue} paused={!focused}
                   onPoke={async () => { tap(); onPoke?.(); }}
+                  onBuilding={async (id: string) => { tap(); onBuilding?.(id); }}
                   dom={{ scrollEnabled: false, bounces: false, overScrollMode: "never", style: { flex: 1, backgroundColor: "transparent" }, containerStyle: { flex: 1 } } as never} />
       )}
     </View>

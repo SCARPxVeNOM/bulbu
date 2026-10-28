@@ -38,6 +38,8 @@ app.post("/api/users", async c => {
 app.post("/api/demo/reset", c => { seed(); return c.json({ ok: true, users: DEMO_USERS.map(u => u.id) }); });
 
 // photos, cut-outs and pictures from "I bought it" (random file names; no listing)
+// (readable from any page: the 3D view draws them into a texture, which needs CORS even for an image)
+app.use("/media/*", cors({ origin: "*", allowMethods: ["GET"] }));
 app.get("/media/:file", c => {
   const f = mediaPath(c.req.param("file"));
   if (!/^[a-z]+-[\w-]+\.(jpg|jpeg|png|webp)$/i.test(path.basename(f)) || !fs.existsSync(f)) return c.notFound();

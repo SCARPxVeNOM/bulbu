@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { DOMProps } from "expo/dom";
 import { createBulbu } from "../../../../web/src/bulbu/engine.js";
 import { DAY_WORLD } from "../../../../web/src/bulbu/world.js";
+import { createKingdom, type KingdomView } from "../../../../web/src/bulbu/kingdom.js";
 import emotes from "../../../../web/src/bulbu/emotes.json";
 
 export type BulbuView = "full" | "hero" | "side" | "close";
@@ -20,6 +21,7 @@ interface Api {
   headBox(): { x: number; top: number; bottom: number; left: number; right: number } | null;
   setBackground(hex: string): void; setView(pos: [number, number, number], target: [number, number, number]): void; setStage(stage: unknown | null): void;
   glow: number; outfit: string | null; paused: boolean; interactive: boolean; emote: string;
+  toScreen(x: number, y: number, z: number): [number, number];
   setGear(id: string | null, url?: string, opts?: { color?: string }): void; showGear(): void; gearDefs: Record<string, unknown>;
 }
 
@@ -40,20 +42,32 @@ export interface BulbuDomProps {
   background?: string;
   view?: BulbuView;
   world?: boolean;
+  /** Bulbu's Kingdom instead of the plain world: the buildings to show, and a label for each */
+  kingdom?: KingdomView;
+  labels?: KingdomLabel[];
+  onBuilding?: (id: string) => Promise<void>;
   paused?: boolean;
   interactive?: boolean;
   onPoke?: () => Promise<void>;
   dom?: DOMProps;
 }
 
+/** The floating label over a building: its name and level, and when its construction finishes. */
+export interface KingdomLabel { id: string; title: string; sub: string; kind: "building" | "built" | "plot"; dim: boolean }
+
 const base = () => { const b = process.env.EXPO_BASE_URL || "/"; return b.endsWith("/") ? b : b + "/"; };
 
-export default function BulbuDom({ emote, animation, cue, glow, outfit, gear, gearColor, show, line, background = "#E9F0FF", view = "full", world = false, paused = false, interactive = false, onPoke }: BulbuDomProps) {
+export default function BulbuDom({ emote, animation, cue, glow, outfit, gear, gearColor, show, line, background = "#E9F0FF", view = "full", world = false, kingdom, labels, onBuilding, paused = false, interactive = false, onPoke }: BulbuDomProps) {
   const host = useRef<HTMLDivElement>(null);
   const bubble = useRef<HTMLDivElement>(null);
   const [api, setApi] = useState<Api | null>(null);
   const [failed, setFailed] = useState(false);
   const poke = useRef(onPoke); poke.current = onPoke;
+  const pick = useRef(onBuilding); pick.current = onBuilding;
+  const realm = useRef<ReturnType<typeof createKingdom> | null>(null);
+  const labelEls = useRef<Record<string, HTMLButtonElement | null>>({});
+  const isKingdom = !!kingdom;
+  if (isKingdom && !realm.current) realm.current = createKingdom({ url: base() + "kingdom.glb" });
 
   useEffect(() => {
     if (process.env.EXPO_DOM_HOST_OS) {        // inside the phone's WebView (on web this is a plain div in the page)
@@ -73,10 +87,36 @@ export default function BulbuDom({ emote, animation, cue, glow, outfit, gear, ge
 
   useEffect(() => {
     if (!api) return;
-    if (world) api.setStage(DAY_WORLD);
+    if (isKingdom && realm.current) api.setStage(realm.current.stage);
+    else if (world) api.setStage(DAY_WORLD);
     else { api.setStage(null); api.setBackground(background); const v = VIEWS[view]; api.setView([...v.pos], [...v.target]); }
-    api.interactive = interactive && !world;
-  }, [api, background, view, interactive, world]);
+    api.interactive = isKingdom || (interactive && !world);       // the kingdom can be turned round with a drag
+  }, [api, background, view, interactive, world, isKingdom]);
+  const kingdomKey = kingdom ? JSON.stringify(kingdom) : "";
+  useEffect(() => { if (realm.current && kingdom) realm.current.set(kingdom); }, [kingdomKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // the labels follow their buildings on screen (moved directly, every frame, without re-rendering)
+  useEffect(() => {
+    if (!api || !isKingdom) return;
+    let raf = 0;
+    const tick = () => {
+      const k = realm.current, s = host.current;
+      if (k && s) {
+        const r = s.getBoundingClientRect(), at = k.anchors();
+        for (const [id, el] of Object.entries(labelEls.current)) {
+          if (!el) continue;
+          const p = at[id];
+          if (!p) { el.style.display = "none"; continue; }
+          const [x, y] = api.toScreen(p[0], p[1], p[2]);
+          el.style.display = "flex";
+          el.style.transform = `translate(${Math.round(x - r.left)}px, ${Math.round(y - r.top)}px) translate(-50%, -100%)`;
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(raf);
+  }, [api, isKingdom]);
 
   useEffect(() => { if (api && emote && api.emote !== emote) api.setEmote(emote); }, [api, emote]);
   useEffect(() => { if (api && glow != null) api.glow = glow; }, [api, glow]);
@@ -103,8 +143,19 @@ export default function BulbuDom({ emote, animation, cue, glow, outfit, gear, ge
   }, [api, line]);
 
   return (
-    <div style={{ position: "absolute", inset: 0, overflow: "hidden", background: world ? "#a3b2f3" : background, touchAction: "none" }}>
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden", background: isKingdom ? "#B9B8FF" : world ? "#a3b2f3" : background, touchAction: "none" }}>
       <div ref={host} style={{ position: "absolute", inset: 0 }} />
+      {api && isKingdom && (labels ?? []).map(l => (
+        <button key={l.id} ref={el => { labelEls.current[l.id] = el; }} onClick={() => { void pick.current?.(l.id); }}
+                aria-label={`${l.title}, ${l.sub}`}
+                style={{ position: "absolute", left: 0, top: 0, display: "none", flexDirection: "column", alignItems: "center", gap: 1, zIndex: 2,
+                  padding: "4px 9px 5px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,.95)", cursor: "pointer", whiteSpace: "nowrap",
+                  background: l.dim ? "rgba(122,112,170,.86)" : "rgba(255,255,255,.92)", boxShadow: "0 6px 14px rgba(40,40,120,.18)",
+                  font: "800 11px/1.15 'Plus Jakarta Sans', system-ui, -apple-system, Roboto, sans-serif", color: l.dim ? "#fff" : "#141B4D" }}>
+          <span>{l.title}</span>
+          <span style={{ fontWeight: 700, fontSize: 10, color: l.dim ? "#EDEAFF" : l.kind === "building" ? "#B3610B" : l.kind === "built" ? "#18935F" : "#5B6487" }}>{l.kind === "building" ? "🔨 " : l.kind === "built" ? "✓ " : "+ "}{l.sub}</span>
+        </button>
+      ))}
       {!api && (
         <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}>
           <img src={base() + "bulbu.svg"} alt={failed ? "Bulbu" : "Loading Bulbu"} style={{ width: "34%", maxWidth: 120, opacity: 0.9, animation: failed ? undefined : "bob 2.4s ease-in-out infinite" }} />

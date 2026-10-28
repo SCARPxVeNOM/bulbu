@@ -3,6 +3,7 @@ import {
   achievements, addDays, allImpacts, inventory, lightOf, NEW_WORLD, worldState, classifyApp, costGoal, newlyUnlocked, outfitById, outfitStates, dayKey, fmtDays, fmtMinutes, fmtMoney, forecast, glowFor, impactsOf, insights,
   level, patterns, progressSeries, reactionFor, simulate, streak, swapFor, typicalOrder,
   type Activity, type Category, type Change, type Emote, type Forecast, type Goal, type Impact, type WhatIf,
+  kingdom,
 } from "@bulbu/engine";
 import { store, uid, type Fact, type User } from "./db.ts";
 import { subtitleOf } from "./goals.ts";
@@ -47,6 +48,7 @@ export function snapshot(userId: string, now = new Date()) {
     nudges: nudges(user, goals, acts, facts, now), achievements: achievements(goals, acts, now),
     outfits: outfitStates(goals, acts, now), letter: user.letter ?? null,
     world: worldState(goals, acts, user.world ?? NEW_WORLD, now),
+    kingdom: kingdom(goals, acts, now),
     inventory: inventory(goals, acts, user.world ?? NEW_WORLD, user.outfit, now, user.gear ?? null),
     ai: { enabled: ai.enabled, models: ai.models }, now: now.toISOString(),
   };

@@ -2,11 +2,11 @@
 // Pass `getUserId` from wherever the app keeps the session (localStorage on web, AsyncStorage / SecureStore on RN).
 import type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId,
 } from "@bulbu/engine";
 export type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId,
 };
 
 /** "sweater" and "hoodie" are the built-in outfits; the eight Bulbus are OutfitIds; null is no outfit. */
@@ -36,6 +36,8 @@ export interface Snapshot {
   letter: Letter | null;
   /** Bulbu World: level, Light, buildings, fog, tour step */
   world: WorldState;
+  /** Bulbu's Kingdom: a building per goal, with its level, construction ETA, glow and fog */
+  kingdom: KingdomState;
   /** everything Bulbu can wear or carry, and how each is earned */
   inventory: Inventory;
   ai: { enabled: boolean; models: { spark: string; wonder: string } };

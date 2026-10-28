@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const from = join(here, "../../web/public"), to = join(here, "../public");
 mkdirSync(join(to, "gear"), { recursive: true });
-// gear/: real-life items Bulbu can hold (one GLB each)
-for (const f of ["bulbu.glb", "bulbu.svg", "gear/iphone.glb", "gear/ipad.glb"]) {
+// kingdom.glb: Bulbu's Kingdom (scripts/build-kingdom.mjs in apps/web); gear/: real-life items Bulbu can hold
+for (const f of ["bulbu.glb", "bulbu.svg", "kingdom.glb", "gear/iphone.glb", "gear/ipad.glb"]) {
   const a = join(from, f), b = join(to, f);
   let same = false;
   try { const sa = statSync(a), sb = statSync(b); same = sa.size === sb.size && sb.mtimeMs >= sa.mtimeMs; } catch { /* not copied yet */ }

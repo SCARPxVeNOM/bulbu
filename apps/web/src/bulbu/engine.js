@@ -38,6 +38,7 @@ const BLOOM_LAYER = 1;
 //   background(ctx, w, h, project)                               paints the backdrop (canvas pixels); project(x, y, z) -> [px, py]
 //   build({ THREE, scene, camera, renderer, BLOOM_LAYER }) -> update(dt, t)   adds scene props once; update runs every frame
 //   light: { scale, tint, glow, env }                            relight Bulbu for the world (e.g. night: dimmer, moon-blue, warmer own glow)
+//   controls: { minDistance, maxDistance, min/maxPolarAngle, … }  OrbitControls limits while the stage is up (with orbit: true)
 // Props with userData.noMask stay out of Bulbu's silhouette mask (so the halo still glows over them); props with
 // userData.noBloom are skipped by the glow passes (only drawn in the final image).
 export function createBulbu({ container, glbBytes, emotes, reduceMotion = false, onReady, onEmote, onAnim, onPoke, stage = null }) {
@@ -64,7 +65,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   scene.environment = pmrem.fromScene(studio, 0.02).texture;
   scene.environmentIntensity = 0.5;
 
-  const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 50);
+  const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 120);
   camera.position.set(0.75, 1.2, 5.6);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 1.1, 0);
@@ -72,6 +73,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   controls.minDistance = 2.6; controls.maxDistance = 10;
   controls.maxPolarAngle = Math.PI * 0.62;
   controls.autoRotate = false; controls.autoRotateSpeed = 0.6;
+  const CONTROL_DEFAULTS = { minDistance: 2.6, maxDistance: 10, minPolarAngle: 0, maxPolarAngle: Math.PI * 0.62, minAzimuthAngle: -Infinity, maxAzimuthAngle: Infinity, enablePan: false };
 
   const hemi = new THREE.HemisphereLight(0xfffaf6, 0xd9cdf2, 1.5); scene.add(hemi);
   const key = new THREE.DirectionalLight(0xfffaf4, 1.5); key.position.set(-2.6, 3.8, 4.2); scene.add(key);
@@ -156,6 +158,8 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     }
     scene.traverse(o => { if (o.userData.noMask) noMask.push(o); if (o.userData.noBloom) noBloom.push(o); });
     if (stageCfg && stageCfg.orbit === false) controls.enabled = false;
+    // a stage can set how far the camera may be turned and zoomed (the kingdom lets you look round the island)
+    Object.assign(controls, CONTROL_DEFAULTS, (stageCfg && stageCfg.controls) || {});
     const L = (stageCfg && stageCfg.light) || null;
     baseLights.forEach(([l, i, c]) => { l.intensity = i * (L ? L.scale ?? 1 : 1); l.color.copy(c); if (L && L.tint) l.color.multiply(new THREE.Color(L.tint)); });
     hemi.groundColor.copy(baseGround); if (L && L.tint) hemi.groundColor.multiply(new THREE.Color(L.tint));
