@@ -49,7 +49,7 @@ export default function Home() {
       {(wearing || held) && (
         <View pointerEvents="none" style={{ position: "absolute", left: 16, right: 100, bottom: 130 + ins.bottom, alignItems: "flex-start" }}>
           <View style={{ backgroundColor: "rgba(255,255,255,.85)", borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1.5, borderColor: "#fff" }}>
-            <Text numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 12, color: C.ink }}>{[wearing && `Wearing ${wearing.name} · ${"★".repeat(wearing.level)}`, held && `with your ${held.name}`].filter(Boolean).join(" ")}</Text>
+            <Text numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 12, color: C.ink }}>{[wearing && `Wearing ${wearing.name} · ${"★".repeat(wearing.level)}`, held && `· tap Bulbu to see your ${held.name}`].filter(Boolean).join(" ")}</Text>
           </View>
         </View>
       )}

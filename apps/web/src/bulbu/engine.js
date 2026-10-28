@@ -569,22 +569,27 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     if (emote) setEmote(emote);
   }
   // ------------------------------------------------------------ gear
-  // Real things the user bought (their own GLB each, e.g. an iPhone), carried in Bulbu's right hand on top of any
-  // outfit. Each model is measured and scaled to Bulbu's size on load, so any GLB of the right kind fits:
+  // A real thing the user bought (its own GLB, e.g. their iPad). Bulbu doesn't carry it around: tap Bulbu (or call
+  // showGear()) and it plays the item's emote. The item pops into both hands, Bulbu turns to it and looks at it
+  // happily for a few seconds, then puts it away. Each model is measured and scaled on load, so any GLB fits:
   //   size    longest side in Bulbu units (Bulbu is ~2.1 tall)
-  //   at      where the item's centre sits, model space, in the bind pose (Bulbu faces +z)
-  //   turn    extra rotation (radians, XYZ) after standing the item upright with its front (+z) to the camera
+  //   at      where the item's centre sits while Bulbu holds it (model space, Bulbu faces +z)
+  //   rot     its rotation there (XYZ radians): the screen faces Bulbu, the back faces you
   //   screen  material names to light up with Bulbu's own glowing wallpaper
   //   body    material names that take the colour of the user's own one (a blue iPad turns Bulbu's iPad blue)
+  //   hide    material names of extras to leave out (the iPad model comes with an Apple Pencil)
+  // The hold pose is the moment in the "Type" clip where both hands reach forward, with the right arm turned in a
+  // little more (`reach`). Bulbu's arms are short and its bulb is wide, so the item sits just in front of the hands.
   const GEAR = {
-    iphone: { size: 0.42, at: [-0.61, 0.63, 0.25], turn: [-0.12, 0.30, 0.10], screen: /screen/i,
+    iphone: { size: 0.62, at: [0.08, 0.60, 0.66], rot: [0.5, Math.PI + 0.19, Math.PI / 2], screen: /screen/i,
               body: /^COLOUR_Cherry_(Backpanel|Side_Panel|Side_Panel_Gloss|Antenna|Aniso|Aniso_0|Plastic|Apple|Side_Button_Detail)$/ },
-    ipad:   { size: 0.58, at: [-0.70, 0.62, 0.30], turn: [-0.10, 0.40, 0.06], screen: /^screen$/i, flipScreen: true, body: /^Body$/ },
+    ipad:   { size: 0.62, at: [0.06, 0.56, 0.64], rot: [0.28, Math.PI + 0.19, 0], screen: /^screen$/i, flipScreen: true, body: /^Body$/, hide: /^apple_pencil/ },
   };
+  const HOLD = { clip: "Type", at: 2.0, D: 5.2, ease: 0.55, reach: [0, -0.2, 0.3] };
   const HAND_PROPS = ["Champ_Trophy", "Fit_Dumbbell", "Techie_Laptop", "Techie_Laptop_Logo"];
   const gearCache = {};
-  let gearId = null, gearGroup = null, gearBone = null, gearBind = null, showT = -1;
-  const gearHeld = () => !!(gearGroup && gearGroup.visible);
+  let gearId = null, gearGroup = null, showT = -1, holdW = 0, squint = 0;
+  const gearHeld = () => showT >= 0;
   function wallpaper(flip = false) {
     const c = document.createElement("canvas"); c.width = 256; c.height = 512; const g = c.getContext("2d");
     const grd = g.createLinearGradient(0, 0, 256, 512); grd.addColorStop(0, "#8EA6FF"); grd.addColorStop(0.55, "#B79BFF"); grd.addColorStop(1, "#FFB8D9");
@@ -597,14 +602,12 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.flipY = flip; if (flip) { t.center.set(0.5, 0.5); t.rotation = Math.PI; }
     return new THREE.MeshBasicMaterial({ map: t, toneMapped: false });
   }
-  // the bone's world matrix in the bind pose, from any skinned mesh that uses it
-  function bindMatrix(bone) {
-    let m = null;
-    model.traverse(o => { if (m || !o.isSkinnedMesh) return; const i = o.skeleton.bones.indexOf(bone); if (i >= 0) m = o.skeleton.boneInverses[i].clone().invert(); });
-    return m;
-  }
   function fitGear(id, scene) {
     const def = GEAR[id] || GEAR.iphone, root = new THREE.Group(), inner = new THREE.Group(), body = [];
+    if (def.hide) {        // drop the extras first, so they don't count in the size
+      const drop = []; scene.traverse(o => { if (o.isMesh && (Array.isArray(o.material) ? o.material : [o.material]).some(m => def.hide.test(m.name || ""))) drop.push(o); });
+      drop.forEach(o => o.parent.remove(o));
+    }
     scene.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(scene), size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3());
     const k = def.size / Math.max(size.x, size.y, size.z);
@@ -617,21 +620,9 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
       else if (def.body) ms.forEach(m => { if (def.body.test(m.name || "") && m.color) { m.userData.base = m.color.clone(); body.push(m); } });
     });
     root.userData.body = body;
-    inner.rotation.set(...(def.turn || [0, 0, 0]));
-    root.add(inner); root.userData.gear = id;
+    root.position.set(...def.at); root.rotation.set(...def.rot);
+    root.add(inner); root.userData.gear = id; root.visible = false;
     return root;
-  }
-  function placeGear() {
-    if (!gearGroup || !model) return;
-    gearBone = gearBone || nodes["prop.R"] || nodes["propR"];
-    if (!gearBone) return;
-    gearBind = gearBind || bindMatrix(gearBone);
-    if (gearGroup.parent !== gearBone) gearBone.add(gearGroup);
-    // put the item where it should be in the bind pose; after that it simply rides on the hand
-    const def = GEAR[gearId] || GEAR.iphone;
-    const want = new THREE.Matrix4().makeTranslation(...def.at);
-    const local = (gearBind ? gearBind.clone().invert() : new THREE.Matrix4()).multiply(want);
-    local.decompose(gearGroup.position, gearGroup.quaternion, gearGroup.scale);
   }
   function applyGear() {
     const held = gearHeld();
@@ -640,44 +631,78 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   // the user's colour on the body parts, kept a touch darker and glossy so it still reads as metal and glass
   function tintGear(color) {
     (gearGroup?.userData.body || []).forEach(m => {
-      if (!color) { m.color.copy(m.userData.base); return; }
+      m.userData.metal ??= [m.metalness, m.roughness];
+      if (!color) { m.color.copy(m.userData.base); [m.metalness, m.roughness] = m.userData.metal; return; }
+      // less mirror-like, so the colour still reads in a dim world
+      m.metalness = Math.min(m.userData.metal[0], 0.25); m.roughness = Math.max(m.userData.metal[1], 0.32);
       const c = new THREE.Color(color), hsl = {}; c.getHSL(hsl);
       m.color.setHSL(hsl.h, Math.min(1, hsl.s * 1.05), Math.min(0.62, hsl.l * 0.92));
     });
   }
-  /** setGear(id, url, { color }): hold a real-life item, in the user's colour; setGear(null) puts it away. */
+  /** setGear(id, url, { color }): give Bulbu a real-life item (in the user's colour) to show off; setGear(null) takes it back. */
   function setGear(id, url, opts = {}) {
+    if (showT >= 0) endShow();
     if (gearGroup) { gearGroup.visible = false; gearGroup.parent && gearGroup.parent.remove(gearGroup); }
-    gearId = id || null; gearGroup = null; showT = -1;
-    if (!gearId || !url) { setOutfit(outfit); if (emote) setEmote(emote); return; }
+    gearId = id || null; gearGroup = null;
+    if (!gearId || !url) return;
     const want = gearId;
     const done = scene => {
-      if (gearId !== want) return;
+      if (gearId !== want || !model) return;
       gearGroup = gearCache[want] = gearCache[want] || fitGear(want, scene);
-      gearGroup.visible = true; placeGear(); tintGear(opts.color); setOutfit(outfit);
-      if (emote) setEmote(emote);
+      model.add(gearGroup); gearGroup.visible = false; tintGear(opts.color);
+      if (pendingShow) { pendingShow = false; showGear(); }
     };
     if (gearCache[want]) return done(null);
     new GLTFLoader().load(url, g => done(g.scene), undefined, err => console.warn("gear", want, err));
   }
-  // "show it off": Bulbu lifts the item up to its face, looks at it, and gets excited
-  function showGear() { if (!gearHeld()) return; showT = 0; setEmote("thriving"); popT = 0; }
-  const armUp = new THREE.Quaternion(), qTmp = new THREE.Quaternion(), axisX = new THREE.Vector3(1, 0, 0), axisZ = new THREE.Vector3(0, 0, 1);
-  function updateGear(dt, t) {
-    if (!gearHeld()) return;
-    const inner = gearGroup.children[0];
-    if (showT >= 0) {
-      showT += dt;
-      const D = 3.2, u = Math.min(showT / D, 1), lift = Math.sin(Math.PI * Math.min(u * 1.25, 1)) ** 0.6;
-      const arm = nodes["arm_bare.R"] || nodes["arm_bareR"];
-      if (arm) { armUp.setFromAxisAngle(axisZ, 1.25 * lift); qTmp.setFromAxisAngle(axisX, -0.35 * lift); arm.quaternion.multiply(armUp).multiply(qTmp); }
-      // turn the screen back toward the camera as the arm comes up, with a little happy wiggle
-      inner.rotation.y = (GEAR[gearId]?.turn?.[1] ?? 0) - 0.95 * lift + Math.sin(showT * 6) * 0.1 * lift;
-      inner.rotation.x = (GEAR[gearId]?.turn?.[0] ?? 0) + 0.35 * lift;
-      if (u >= 1) { showT = -1; setEmote(emote === "thriving" ? "happy" : emote); }
-    } else if (motion) {
-      inner.rotation.z = (GEAR[gearId]?.turn?.[2] ?? 0) + Math.sin(t * 1.6) * 0.03;
+  // The item's emote. Called before the model has loaded, it plays as soon as it can.
+  let pendingShow = false, holdAction = null;
+  function showGear() {
+    if (!gearId) return false;
+    if (!gearGroup || !model) { pendingShow = true; return true; }
+    showT = 0; popT = 0;
+    setEmote("happy");
+    const a = actions[HOLD.clip];
+    if (a) {
+      holdAction = a; a.reset(); a.time = HOLD.at; a.timeScale = 0; a.setEffectiveWeight(1).fadeIn(0.45).play();
+      Object.values(actions).forEach(x => { if (x !== a && x.getEffectiveWeight() > 0) x.fadeOut(0.45); });
+      current = a;
     }
+    applyGear();
+    return true;
+  }
+  function endShow() {
+    showT = -1; holdW = 0; squint = 0;
+    if (headBone) headBone.quaternion.copy(headBone.userData.rest[1]);
+    if (gearGroup) gearGroup.visible = false;
+    if (model) model.rotation.y = 0;
+    if (holdAction) { holdAction.timeScale = 1; holdAction = null; }
+    setOutfit(outfit);
+    const back = baseAnim; current = null; play(back === HOLD.clip ? "Idle" : back, 0.45);
+  }
+  const qLook = new THREE.Quaternion(), eLook = new THREE.Euler();
+  function updateGear(dt, t) {
+    if (showT < 0 || !gearGroup) return;
+    showT += dt;
+    const { D, ease } = HOLD;
+    const w = showT < ease ? showT / ease : showT > D - ease ? Math.max(0, (D - showT) / ease) : 1;
+    holdW = w * w * (3 - 2 * w);                               // smoothstep in and out
+    // the item pops into the hands (a little overshoot), bobs while Bulbu looks at it, and shrinks away at the end
+    const pop = showT < ease ? 1 + 0.18 * Math.sin(Math.PI * Math.min(1, showT / ease)) : 1;
+    gearGroup.visible = holdW > 0.02;
+    gearGroup.scale.setScalar(Math.max(0.001, holdW * pop));
+    const def = GEAR[gearId] || GEAR.iphone;
+    gearGroup.position.set(def.at[0], def.at[1] + (motion ? Math.sin(t * 2.2) * 0.012 : 0), def.at[2]);
+    const armR = nodes["arm_bare.R"] || nodes["arm_bareR"];
+    if (armR) { eLook.set(HOLD.reach[0] * holdW, HOLD.reach[1] * holdW, HOLD.reach[2] * holdW); armR.quaternion.multiply(qLook.setFromEuler(eLook)); }
+    // Bulbu turns toward it, tips its head down to look, and its eyes go soft and happy
+    model.rotation.y = 0.2 * holdW;
+    if (headBone) {
+      eLook.set(0.2 * holdW, 0.22 * holdW, -0.06 * holdW); qLook.setFromEuler(eLook);
+      headBone.quaternion.multiply(qLook);
+    }
+    squint = 0.38 * holdW;
+    if (showT >= D) endShow();
   }
 
   const SLEEP_HIDE = ["Eyes_Closed", "Eyes_Squeeze", "Eye_Stars", "Brows_Focused", "Brows_Drained", ...FX];
@@ -850,6 +875,8 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   function setSpeed(name, v) { if (actions[name]) actions[name].timeScale = v; }
   let playing = "Idle";
   function play(name, fade = 0.35, fromEmote = false) {
+    // showing off an item holds its pose; the motion asked for now plays when it's put away
+    if (showT >= 0) { if (name !== "Wave" && name !== HOLD.clip) baseAnim = name; return; }
     const act = activity();
     if (act && name !== act) {            // holding a prop: keep doing the activity (only the sleepy face follows)
       if (!fromEmote) { const s = name === "Sleepy"; if (s !== sleeping) { sleeping = s; applyFace(); } }
@@ -882,7 +909,8 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     ray.setFromCamera(ndc, camera);
     if (ray.intersectObject(model, true).length) poke();
   });
-  function poke() { popT = 0; if (!activity()) play("Wave"); onPoke && onPoke(); }
+  // tapping Bulbu: with a real-life item it shows it off, otherwise it waves back
+  function poke() { popT = 0; if (gearId && gearGroup) { if (showT < 0) showGear(); } else if (!activity()) play("Wave"); onPoke && onPoke(); }
 
   // ------------------------------------------------------------ loop
   const clock = new THREE.Clock();
@@ -897,6 +925,8 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
     if (stageUpdate) stageUpdate(dt, t);
     if (!model) { renderFrame(); return; }
+    // while Bulbu shows an item off its head is turned on top of the clip: start each frame from the rest pose
+    if (showT >= 0 && headBone) headBone.quaternion.copy(headBone.userData.rest[1]);
     if (!frozen) mixer.update(dt);
     updateGear(dt, t);
     if (screen && outfit === "techie") {
@@ -918,7 +948,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     }
     morphMeshes.forEach(mesh => {
       for (const [name, i] of Object.entries(mesh.morphTargetDictionary)) {
-        let v = now.morph[name] ?? 0; if (name === "Blink") v = Math.max(v, blink);
+        let v = now.morph[name] ?? 0; if (name === "Blink") v = Math.max(v, blink, squint);
         mesh.morphTargetInfluences[i] = v;
       }
     });
@@ -1011,8 +1041,9 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     get sleeping() { return sleeping; },
     // "sweater", "hoodie" or null (true means the sweater)
     set outfit(v) { setOutfit(v); }, get outfit() { return outfit; },
-    // a real-life item in Bulbu's hand (its own GLB): setGear("iphone", url) / setGear(null); showGear() shows it off
-    setGear, showGear, get gear() { return gearHeld() ? gearId : null; }, gearDefs: GEAR,
+    // a real-life item Bulbu can show off (its own GLB): setGear("ipad", url, { color }) / setGear(null);
+    // showGear() plays its emote (tapping Bulbu does too)
+    setGear, showGear, get gear() { return gearId; }, get showing() { return showT >= 0; }, gearDefs: GEAR,
     outfits: Object.keys(OUTFITS),
     resetView() { camera.position.set(0.75, 1.2, 5.6); controls.target.set(0, 1.1, 0); controls.update(); },
   };

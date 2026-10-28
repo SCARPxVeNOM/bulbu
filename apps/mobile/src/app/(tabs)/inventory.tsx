@@ -1,7 +1,8 @@
 // Inventory: everything Bulbu can wear or carry. Four ways to get things:
 //   Level   your XP unlocks them      Streak  keep showing up
 //   Shop    buy with Light            Real life  you bought the real thing, Bulbu gets one too
-// Anything you own levels up (1 → 3) with Light. Bulbu wears one outfit at a time and can also hold a real-life item.
+// Anything you own levels up (1 → 3) with Light. Bulbu wears one outfit at a time, and has one real-life item to show
+// off: tap Bulbu and it holds your iPad up and looks at it (its emote).
 // Real life from a photo: Muse Spark says what it is, SAM 3.1 cuts it out of your photo, Muse Image draws Bulbu with it.
 import { useEffect, useId, useMemo, useState } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "react-native";
@@ -62,6 +63,9 @@ export default function InventoryScreen() {
     return () => clearInterval(t);
   }, [waiting, refresh]);
 
+  // opening an item Bulbu can hold plays its emote on the stage above
+  useEffect(() => { if (item?.hold) setShow(n => n + 1); }, [item?.id, item?.hold]);
+
   if (!state || !inv) return null;
   const owned = inv.items.filter(i => i.owned).length;
 
@@ -74,7 +78,7 @@ export default function InventoryScreen() {
   const showOff = () => { setOpen(null); setTimeout(() => setShow(n => n + 1), 350); };
 
   const label = item && !item.equipped ? (item.source === "real" ? "TRYING IT" : "TRYING ON") : "WEARING";
-  const title = item ? item.name : [outfitItem?.name, held && `holding ${held.name}`].filter(Boolean).join(" · ") || "Nothing";
+  const title = item ? item.name : [outfitItem?.name, held && `has your ${held.name}`].filter(Boolean).join(" · ") || "Nothing";
 
   return (
     <Screen tabs>
@@ -122,7 +126,7 @@ export default function InventoryScreen() {
       <Sheet open={!!item} onClose={() => setOpen(null)} title={item?.mine?.name || item?.name || ""}>
         {item && <ItemDetail it={item} light={inv.light} busy={busy}
           onWear={() => act(() => item.equipped ? api.unequipItem(item.id) : api.equipItem(item.id),
-            item.equipped ? (item.source === "real" ? `Bulbu put the ${item.name} away` : `Took off ${item.name}`) : (item.source === "real" ? `Bulbu has your ${item.name}!` : `Bulbu is wearing ${item.name}`))
+            item.equipped ? (item.source === "real" ? `Bulbu gave the ${item.name} back` : `Took off ${item.name}`) : (item.source === "real" ? `Tap Bulbu to see your ${item.name}!` : `Bulbu is wearing ${item.name}`))
             .then(() => { if (!item.equipped && item.hold) showOff(); })}
           onShow={showOff}
           onBuy={() => act(() => api.buyItem(item.id), `${item.name} is yours!`, true)}
@@ -271,7 +275,7 @@ function ItemDetail({ it, light, busy, onWear, onShow, onBuy, onUpgrade, onAdd, 
     {it.owned && <>
       {real
         ? <Row gap={10}>
-            <View style={{ flex: 1 }}><Btn kind={it.equipped ? "ghost" : "primary"} icon={it.equipped ? undefined : "check"} title={it.equipped ? "Put it away" : "Give it to Bulbu"} busy={busy} onPress={onWear} /></View>
+            <View style={{ flex: 1 }}><Btn kind={it.equipped ? "ghost" : "primary"} icon={it.equipped ? undefined : "check"} title={it.equipped ? "Take it back" : "Give it to Bulbu"} busy={busy} onPress={onWear} /></View>
             {it.equipped && it.hold && <View style={{ flex: 1 }}><Btn title="✨ Show it off" onPress={onShow} /></View>}
           </Row>
         : <Btn kind={it.equipped ? "ghost" : "primary"} icon={it.equipped ? undefined : "check"} title={it.equipped ? "Take it off" : `Wear ${it.name}`} busy={busy} onPress={onWear} />}
@@ -295,7 +299,7 @@ function ItemDetail({ it, light, busy, onWear, onShow, onBuy, onUpgrade, onAdd, 
       <Text style={T.small}>{it.source === "level" ? "Log good habits to earn XP. It unlocks by itself." : "Log something good every day. It unlocks by itself."}</Text>
     </View>}
     {!it.owned && real && <>
-      {it.hold && <Text style={T.small}>Bulbu holds this one in 3D, in the same colour as yours.</Text>}
+      {it.hold && <Text style={T.small}>Tap Bulbu and it shows this one off in 3D, in the same colour as yours.</Text>}
       <Btn icon="camera" title={`I bought ${/^[aeiou]/i.test(it.name) ? "an" : "a"} ${it.name}`} onPress={onAdd} />
     </>}
   </>;
