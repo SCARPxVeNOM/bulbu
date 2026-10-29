@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ITEMS, type Activity, type AppKind, type Goal, type WorldSave } from "@bulbu/engine";
+import { ITEMS, type Activity, type AppKind, type Card, type Goal, type WorldSave } from "@bulbu/engine";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const file = process.env.BULBU_DB ?? path.resolve(here, "../data/bulbu.db");
@@ -34,6 +34,8 @@ export interface User {
   world?: WorldSave;
   /** the last reaction, so Bulbu looks the same when the app reopens */
   mood?: { emote: string; at: string };
+  /** today's hand of cards (dealt once a day), and the ones already played */
+  hand?: { day: string; cards: Card[]; played: string[]; via: "spark" | "engine" };
   /** nudge kinds the user dismissed, so Bulbu sends fewer of them */
   ignored?: Record<string, number>;
 }

@@ -13,15 +13,8 @@ import { GlossyIcon } from "@/components/GlossyIcon";
 import { Icon } from "@/components/Icon";
 import { Breakdown, Btn, Card, CardHead, Chip, Chips, Header, Progress, Row, Screen, Sheet, tap } from "@/components/ui";
 import { C, F, T } from "@/theme";
+import { BUILDING_ART } from "@/components/world/buildings";
 
-const ART: Record<BuildingId, { icon: string; colors: [string, string] }> = {
-  Castle: { icon: "trophy", colors: ["#FFD27A", "#F59E6B"] },
-  Library: { icon: "code", colors: ["#9DB4FF", "#7B5CFF"] },
-  Vault: { icon: "save", colors: ["#9BE7C4", "#2EB48A"] },
-  Arena: { icon: "workout", colors: ["#FFB3B3", "#F2635F"] },
-  Observatory: { icon: "read", colors: ["#B9E3FF", "#4F9DF0"] },
-  Workshop: { icon: "other", colors: ["#E7D3B5", "#B98955"] },
-};
 // what-if ideas follow the goal, not the building (the Castle holds whichever goal is the main one)
 const IDEAS: Partial<Record<GoalTemplate, string[]>> = {
   dsa: ["1 hour less Instagram a day", "Solve 2 problems a day"], productivity: ["1 hour less Instagram a day"],
@@ -33,7 +26,8 @@ const shortDate = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateStrin
 
 export default function BuildingPanel() {
   const { id } = useLocalSearchParams<{ id: BuildingId }>();
-  const { state, toast } = useStore();
+  const { state, toast, hand, playCard } = useStore();
+  const [playing, setPlaying] = useState(false);
   const [r, setR] = useState<BuildingReport | null>(null);
   const [missing, setMissing] = useState<string | null>(null);
   const [why, setWhy] = useState<{ title: string; steps: Step[]; note?: string } | null>(null);
@@ -50,7 +44,8 @@ export default function BuildingPanel() {
     <Btn title="Add a goal to build it" onPress={() => router.replace("/goals" as never)} /></Screen>;
   if (!r) return <Screen><Header title="Building" /><ActivityIndicator color={C.primary} /></Screen>;
 
-  const art = ART[r.id];
+  const art = BUILDING_ART[r.id];
+  const card = hand?.cards.find(c => c.building === r.id);
   const shift = r.todayShift, moved = Math.abs(shift) >= 0.05;
   const later = shift > 0;
   const tryIdea = async (text: string) => {
@@ -113,15 +108,21 @@ export default function BuildingPanel() {
         </Card>
       </View>}
 
-      {/* a move that would bring it closer */}
+      {/* today's card for this building (play it when you've done it), or the engine's swap */}
       {r.building && <View>
-        <CardHead title="A move that helps" />
+        <CardHead title={card ? "Your card for it today" : "A move that helps"} />
         <Card style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-          <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: "#FFF4D6", alignItems: "center", justifyContent: "center" }}><Text style={{ fontSize: 22 }}>🃏</Text></View>
+          <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: "#FFF4D6", alignItems: "center", justifyContent: "center" }}><Text style={{ fontSize: 22 }}>{card?.icon ?? "🃏"}</Text></View>
           <View style={{ flex: 1 }}>
-            <Text style={T.b}>{r.swap.title}</Text>
-            <Text style={T.small}>{r.swap.detail}</Text>
+            <Text style={T.b}>{card ? card.title : r.swap.title}</Text>
+            <Text style={T.small}>{card ? `${fmtDays(-card.daysCloser).slice(1)} sooner${card.clears ? " · clears the Dim" : ""}` : r.swap.detail}</Text>
           </View>
+          {card && <Btn small title="I did it" busy={playing} onPress={async () => {
+            setPlaying(true);
+            const done = await playCard(card.id);
+            setPlaying(false);
+            if (done) router.navigate("/home" as never);       // watch it land on the kingdom
+          }} />}
         </Card>
       </View>}
 

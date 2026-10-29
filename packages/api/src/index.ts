@@ -2,11 +2,11 @@
 // Pass `getUserId` from wherever the app keeps the session (localStorage on web, AsyncStorage / SecureStore on RN).
 import type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment, Card,
 } from "@bulbu/engine";
 export type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment, Card,
 };
 
 /** "sweater" and "hoodie" are the built-in outfits; the eight Bulbus are OutfitIds; null is no outfit. */
@@ -67,6 +67,7 @@ export interface LogResult {
   needsText?: boolean;
   message?: string;
 }
+export interface Hand { cards: Card[]; played: number; via: "spark" | "engine" }
 export interface ChatReply { reply: string; bulbu?: BulbuDirective; whatIf?: WhatIf; focus?: number; remembered?: string[]; via: string }
 
 /** One app's foreground time for a day, as Android's UsageStatsManager (or a parsed screenshot) reports it. */
@@ -172,6 +173,10 @@ export function createBulbuClient(o: ClientOptions = {}) {
     world: () => call<WorldState>("GET", "/world"),
     /** one building of Bulbu's Kingdom: construction ETA, today's shift, the maths behind it */
     building: (id: BuildingId) => call<BuildingReport>("GET", `/kingdom/${q(id)}`),
+    /** today's hand of cards (Muse Spark deals three a day) */
+    hand: () => call<Hand>("GET", "/cards"),
+    /** play a card: you did it in real life; returns what it moved, like a log */
+    playCard: (id: string) => call<LogResult>("POST", "/cards/play", { id }),
     tutorial: (step: number, gift = false) => call<WorldState>("POST", "/world/tutorial", { step, gift }),
     inventory: () => call<Inventory>("GET", "/inventory"),
     buyItem: (id: string) => call<Inventory>("POST", `/inventory/${q(id)}/buy`),

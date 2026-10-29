@@ -11,7 +11,7 @@ const STARTER_LIGHT = 100;
 import { store, uid, type Fact, type User } from "./db.ts";
 import { makeGoal } from "./goals.ts";
 import { seed, seedIfEmpty, DEMO_USERS } from "./seed.ts";
-import { snapshot, log, chat, whatIf, reflect, remember, type LogInput } from "./service.ts";
+import { snapshot, log, chat, whatIf, reflect, remember, hand, playCard, type LogInput } from "./service.ts";
 import { ai, transcribe } from "./ai.ts";
 import { ingestUsage, type UsageInput } from "./usage.ts";
 import { cutout, dataUrlBytes, drawBulbuWith, dropMedia, identify, mediaPath, note, saveMedia } from "./purchase.ts";
@@ -23,7 +23,7 @@ const app = new Hono<{ Variables: { uid: string } }>();
 // Only local and private-network pages are allowed, since profiles here are keyed by x-user-id alone.
 const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/;
 app.use("/api/*", cors({ origin: o => LOCAL_ORIGIN.test(o) ? o : null, allowHeaders: ["content-type", "x-user-id"], allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"] }));
-app.onError((err, c) => { console.error(err); return c.json({ error: err.message }, 500); });
+app.onError((err, c) => { const st = (err as { status?: number }).status ?? 500; if (st >= 500) console.error(err); return c.json({ error: err.message }, st as 400); });
 app.get("/api/health", c => c.json({ ok: true, ai: ai.enabled, models: ai.models }));
 
 // ------------------------------------------------------------------ accounts (local profiles for now; Google/Apple sign-in later)
@@ -88,6 +88,9 @@ app.delete("/api/goals/:id", c => { store.deleteGoal(c.get("uid"), c.req.param("
 
 // the core loop
 app.post("/api/log", async c => c.json(await log(c.get("uid"), await c.req.json<LogInput>())));
+// cards: today's hand (dealt once a day), and playing one (you did it in real life)
+app.get("/api/cards", async c => c.json(await hand(c.get("uid"))));
+app.post("/api/cards/play", async c => c.json(await playCard(c.get("uid"), (await c.req.json<{ id: string }>()).id)));
 app.delete("/api/activities/:id", c => { store.deleteActivity(c.get("uid"), c.req.param("id")); return c.json({ ok: true }); });
 app.post("/api/whatif", async c => c.json(await whatIf(c.get("uid"), (await c.req.json<{ text: string }>()).text)));
 app.get("/api/chat", c => c.json(store.messages(c.get("uid"), 50)));

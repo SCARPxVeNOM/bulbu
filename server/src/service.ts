@@ -3,7 +3,7 @@ import {
   achievements, addDays, allImpacts, inventory, lightOf, NEW_WORLD, worldState, classifyApp, costGoal, newlyUnlocked, outfitById, outfitStates, dayKey, fmtDays, fmtMinutes, fmtMoney, forecast, glowFor, impactsOf, insights,
   level, patterns, progressSeries, reactionFor, simulate, streak, swapFor, typicalOrder,
   type Activity, type Category, type Change, type Emote, type Forecast, type Goal, type Impact, type WhatIf,
-  kingdom, kingdomMoments,
+  kingdom, kingdomMoments, candidates, refreshCard, type Card, type Source,
 } from "@bulbu/engine";
 import { store, uid, type Fact, type User } from "./db.ts";
 import { subtitleOf } from "./goals.ts";
@@ -151,8 +151,16 @@ export async function log(userId: string, input: LogInput, now = new Date()) {
   if (!parsed.activities.length)
     return { needsText: true, questions: parsed.questions, message: "I couldn't find an activity in that. Try something like “40 min on Instagram” or “solved 2 problems”." };
 
-  const source = input.source ?? (input.quick ? "quick" : input.image ? "screenshot" : "text");
-  const added: Activity[] = parsed.activities.map(a => ({ ...a, id: uid("a_"), source }));
+  const source = (input.source ?? (input.quick ? "quick" : input.image ? "screenshot" : "text")) as Source;
+  return applyMoves(userId, parsed.activities, source, parsed.questions, via, now);
+}
+
+/** Store new moves and work out everything they did: impacts, forecasts, Bulbu's reaction, Light, unlocks, and the
+ *  kingdom's moment. Every way in (typed, spoken, a screenshot, a played card) ends here. */
+async function applyMoves(userId: string, moves: Omit<Activity, "id" | "source">[], source: Source, questions: string[], via: "spark" | "offline" | "quick", now: Date,
+                          react?: (impacts: Impact[], fallback: BulbuDirective) => BulbuDirective) {
+  const user = store.user(userId)!, goals = store.goals(userId), history = store.activities(userId);
+  const added: Activity[] = moves.map(a => ({ ...a, id: uid("a_"), source }));
   added.forEach(a => store.putActivity(userId, a));
   const after = [...history, ...added];
   const before = new Map(goals.map(g => [g.id, forecast(g, goals, history, now)]));
@@ -168,19 +176,79 @@ export async function log(userId: string, input: LogInput, now = new Date()) {
   const net = impacts.reduce((s, i) => s + i.days, 0);
   const glow = glowFor(insights(goals, after, now).netDays);
   const fallback: BulbuDirective = { ...r, glow, via: "engine", line: pick(LINES[r.emote]).replace("{days}", fmtDays(net).replace("-", "")) };
-  const bulbu = await reactWithSpark(user, impacts, added, fallback);
-  store.putUser({ ...user, mood: { emote: bulbu.emote, at: now.toISOString() } });
+  const bulbu = react ? react(impacts, fallback) : await reactWithSpark(user, impacts, added, fallback);
+  store.putUser({ ...store.user(userId)!, mood: { emote: bulbu.emote, at: now.toISOString() } });
   const unlocked = newlyUnlocked(goals, history, after, now);
-  // Light this log made for Bulbu World, and the world level before/after (for the level-up moment)
+  // Light this made for Bulbu World, and the world level before/after (for the level-up moment)
   const light = added.reduce((s, a) => s + lightOf(a), 0);
   const save = store.user(userId)?.world ?? NEW_WORLD;
   const lv = { before: worldState(goals, history, save, now).level, after: worldState(goals, after, save, now).level };
-  // things this log unlocked in the inventory (a new level or a streak)
+  // things this unlocked in the inventory (a new level or a streak)
   const had = new Set(inventory(goals, history, save, null, now).items.filter(i => i.owned).map(i => i.id));
   const items = inventory(goals, after, save, null, now).items.filter(i => i.owned && !had.has(i.id)).map(i => ({ id: i.id, name: i.name }));
   // the kingdom's moment: the buildings this moved, for the fog to roll in (or clear) and the ETA to slip (or pull back)
   const moments = kingdomMoments(goals, history, added, now);
-  return { activities: added, impacts, swap, questions: parsed.questions, forecasts, completed, bulbu, via, unlocked, light, worldLevel: lv, items, moments };
+  return { activities: added, impacts, swap, questions, forecasts, completed, bulbu, via, unlocked, light, worldLevel: lv, items, moments };
+}
+
+// ------------------------------------------------------------------ cards
+
+const DEAL_CARDS = { type: "function" as const, function: {
+  name: "deal_cards",
+  description: "Deal today's hand: pick 3 cards from the candidates (by id) and give each a short personal line in Bulbu's voice.",
+  parameters: { type: "object", required: ["cards"], properties: {
+    cards: { type: "array", minItems: 1, maxItems: 3, items: { type: "object", required: ["id", "line"], properties: {
+      id: { type: "string" },
+      line: { type: "string", description: "Max ~12 words, warm and specific to this person (their patterns, their goal). Never guilt." },
+    } } },
+  } } } };
+const BANNED = /\b(track|tracker|tracking|log|logged|logging|monitor|habit|streak|insights?|dashboard)\b/i;
+
+/** Today's hand. Dealt once a day (Muse Spark picks three of the engine's cards and adds a line to each; offline the
+ *  engine's first three); the numbers on each card are brought up to date every time. */
+export async function hand(userId: string, now = new Date()) {
+  const user = store.user(userId)!, goals = store.goals(userId), history = store.activities(userId), day = dayKey(now);
+  let h = user.hand;
+  if (!h || h.day !== day) {
+    const pool = candidates(goals, history, now).slice(0, 8);
+    let cards = pool.slice(0, 3), via: "spark" | "engine" = "engine";
+    if (ai.enabled && pool.length > 3) {
+      try {
+        const facts = store.facts(userId).slice(0, 8).map(f => `- ${f.text}`).join("\n");
+        const msg = await complete({
+          maxTokens: 300, tools: [DEAL_CARDS], toolChoice: "deal_cards",
+          messages: [
+            { role: "system", content: `${PERSONA}\nYou are dealing ${user.name}'s cards for today in Bulbu's Kingdom: small real-life moves. Pick 3 that fit them best, from different buildings where you can, and favour buildings under the Dim. Lines: no numbers (the engine shows those), and never use the words track, log, monitor, habit, streak, insights or dashboard.` },
+            { role: "user", content: `What Bulbu knows about ${user.name}:\n${facts || "- (nothing yet)"}\n\nCandidates:\n${pool.map(c => `${c.id} | ${c.title} | ${c.buildingName} (${c.goalTitle})${c.clears ? " | under the Dim" : ""}`).join("\n")}` },
+          ],
+        });
+        const call = msg.tool_calls?.[0];
+        const picks = call ? args<{ cards: { id: string; line: string }[] }>(call).cards ?? [] : [];
+        const chosen = picks.map(p => { const c = pool.find(x => x.id === p.id); return c && { ...c, line: BANNED.test(p.line) ? undefined : p.line.trim() }; }).filter(Boolean).slice(0, 3) as Card[];
+        if (chosen.length) { cards = [...chosen, ...pool.filter(c => !chosen.some(x => x.id === c.id))].slice(0, 3); via = "spark"; }
+      } catch (e) { console.warn("[spark] deal failed:", (e as Error).message); }
+    }
+    h = { day, cards, played: [], via };
+    store.putUser({ ...user, hand: h });
+  }
+  const cards = h.cards.filter(c => !h!.played.includes(c.id)).map(c => refreshCard(c, goals, history, now)).filter((c): c is Card => !!c);
+  return { cards, played: h.played.length, via: h.via };
+}
+
+/** Play a card: you did it in real life, so it becomes a move. Bulbu celebrates. */
+export async function playCard(userId: string, cardId: string, now = new Date()) {
+  await hand(userId, now);
+  const user = store.user(userId)!, h = user.hand!;
+  const card = h.cards.find(c => c.id === cardId);
+  if (!card) throw Object.assign(new Error("That card isn't in today's hand."), { status: 404 });
+  if (h.played.includes(cardId)) throw Object.assign(new Error("You've already played that card today."), { status: 409 });
+  store.putUser({ ...user, hand: { ...h, played: [...h.played, cardId] } });
+  const move = { ...card.activity, label: card.title, at: now.toISOString() };
+  return applyMoves(userId, [move], "card", [], "quick", now, (impacts, fb) => {
+    const sooner = -impacts.filter(i => i.goalId === card.goalId).reduce((s, i) => s + i.days, 0);
+    return { ...fb, emote: "celebrating", animation: "Celebrate", glow: Math.max(fb.glow, 1), via: "engine",
+      line: sooner >= 0.05 ? `The ${card.buildingName} just got ${fmtDays(-sooner).slice(1)} closer!` : "Card played. Nice one!" };
+  });
 }
 
 // ------------------------------------------------------------------ what-if

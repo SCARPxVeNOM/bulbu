@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
 import { fmtDays } from "@bulbu/engine";
-import type { KingdomMoment, Swap } from "@bulbu/api";
+import type { KingdomMoment } from "@bulbu/api";
 import { Icon } from "@/components/Icon";
 import { Breakdown, Row, Sheet, tap } from "@/components/ui";
 import { C, F, T } from "@/theme";
@@ -12,7 +12,8 @@ import { C, F, T } from "@/theme";
 const shortDate = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 const joinMoves = (m: string[]) => m.length <= 1 ? (m[0] ?? "That") : `${m.slice(0, -1).join(", ")} and ${m[m.length - 1]}`;
 
-export function MomentCard({ m, swap, onOpen, onClose }: { m: KingdomMoment; swap: Swap | null; onOpen: () => void; onClose: () => void }) {
+/** `clear`: the move that clears the Dim (today's card for this building, or the engine's swap), shown on a dim moment */
+export function MomentCard({ m, clear, onOpen, onClose }: { m: KingdomMoment; clear: { title: string; detail: string } | null; onOpen: () => void; onClose: () => void }) {
   const [why, setWhy] = useState(false);
   const rise = useRef(new Animated.Value(0)).current;
   // the card comes in after the fog has started rolling, so the kingdom gets looked at first
@@ -42,11 +43,11 @@ export function MomentCard({ m, swap, onOpen, onClose }: { m: KingdomMoment; swa
                      style={({ pressed }) => ({ paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999, backgroundColor: pressed ? "#E2E7FF" : "#EEF1FF" })}>
             <Text style={{ fontFamily: F.bold, fontSize: 12, color: C.primary }}>See why ›</Text>
           </Pressable>
-          {dim && swap && (
-            <Pressable accessibilityRole="button" accessibilityLabel={`A quick move clears it: ${swap.title}. ${swap.detail}`} onPress={() => { tap(); onOpen(); }}
+          {dim && clear && (
+            <Pressable accessibilityRole="button" accessibilityLabel={`A quick move clears it: ${clear.title}. ${clear.detail}`} onPress={() => { tap(); onOpen(); }}
                        style={({ pressed }) => ({ flex: 1, flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999, backgroundColor: pressed ? "#FFEFC2" : "#FFF4D2" })}>
               <Text style={{ fontSize: 12 }}>🃏</Text>
-              <Text numberOfLines={1} style={{ flex: 1, fontFamily: F.bold, fontSize: 12, color: "#7A4B00" }}>Clear it: {swap.title}</Text>
+              <Text numberOfLines={1} style={{ flex: 1, fontFamily: F.bold, fontSize: 12, color: "#7A4B00" }}>Clear it: {clear.title}</Text>
             </Pressable>
           )}
         </Row>

@@ -9,7 +9,7 @@ export type GoalTemplate =
 export type Category =
   | "study" | "code" | "read" | "workout" | "sleep" | "eat" | "social_media" | "spend" | "save" | "focus" | "other";
 
-export type Source = "quick" | "text" | "voice" | "photo" | "screenshot" | "device" | "focus" | "seed";
+export type Source = "quick" | "text" | "voice" | "photo" | "screenshot" | "device" | "focus" | "seed" | "card";
 
 export interface Goal {
   id: string;

@@ -5,7 +5,7 @@
 // waves (or shows off what you gave it). First time here, Bulbu gives you the tour.
 // After a new move (a screen-time screenshot, say) the kingdom plays the moment: the Dim rolls over the buildings it
 // slowed, their finish dates slip on the labels, Bulbu droops, and a card says what happened and how to clear it.
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { fmtDays } from "@bulbu/engine";
 import { router } from "expo-router";
@@ -17,6 +17,7 @@ import { Bulbu } from "@/components/bulbu/Bulbu";
 import { Hud } from "@/components/world/Hud";
 import { Tour } from "@/components/world/Tour";
 import { MomentCard } from "@/components/world/MomentCard";
+import { HandButton, HandSheet } from "@/components/world/Hand";
 import { GlossyIcon } from "@/components/GlossyIcon";
 import { tap } from "@/components/ui";
 import { C, F } from "@/theme";
@@ -67,8 +68,10 @@ function treasureOf(s: Snapshot) {
 }
 
 export default function Home() {
-  const { state, reaction, setReaction, refresh, toast, moment, setMoment } = useStore();
+  const { state, reaction, setReaction, refresh, toast, moment, setMoment, hand, playCard } = useStore();
   const ins = useSafeAreaInsets();
+  // the hand sheet: false when closed, otherwise the building whose card goes first (or null)
+  const [cardsFor, setCardsFor] = useState<string | null | false>(false);
   const top = moment?.items[0] ?? null;
   // the 3D side of the moment: the biggest shift plays on its building
   const play = useMemo(() => top && moment ? {
@@ -90,6 +93,10 @@ export default function Home() {
     if (b) router.push(`/building/${id}` as never);
     else router.navigate("/goals" as never);              // an empty plot: add a goal to build there
   };
+  const cards = hand?.cards ?? [];
+  // "Clear it" plays today's card for that building when there is one, else the engine's swap (opens the building)
+  const clearCard = top ? cards.find(c => c.building === top.id) : undefined;
+  const clear = clearCard ? { title: clearCard.title, detail: `${fmtDays(-clearCard.daysCloser).slice(1)} sooner` } : moment?.swap ?? null;
   const step = async (n: number, gift = false) => { try { await api.tutorial(n, gift); await refresh(); } catch (e) { toast((e as Error).message); } };
 
   return (
@@ -114,9 +121,18 @@ export default function Home() {
         {shopReady > 0 && <View style={{ position: "absolute", top: -6, right: -6, minWidth: 22, height: 22, borderRadius: 11, backgroundColor: C.red, borderWidth: 2, borderColor: "#fff", alignItems: "center", justifyContent: "center", paddingHorizontal: 4 }}>
           <Text style={{ color: "#fff", fontFamily: F.heavy, fontSize: 11 }}>{shopReady}</Text></View>}
       </Pressable>}
+      {/* the hand of cards, above the inventory */}
+      {!top && (
+        <View style={{ position: "absolute", right: 16, bottom: 212 + ins.bottom }}>
+          <HandButton cards={cards} onPress={() => setCardsFor(null)} />
+        </View>
+      )}
+      <HandSheet open={cardsFor !== false} focus={cardsFor || null} cards={cards} onClose={() => setCardsFor(false)}
+                 onPlay={async c => { const r = await playCard(c.id); if (r) setCardsFor(false); }} />
       {top && (
         <View pointerEvents="box-none" style={{ position: "absolute", left: 14, right: 14, bottom: 98 + ins.bottom }}>
-          <MomentCard m={top} swap={moment?.swap ?? null} onClose={closeMoment} onOpen={() => { closeMoment(); openBuilding(top.id); }} />
+          <MomentCard m={top} clear={clear} onClose={closeMoment}
+                      onOpen={() => { if (clearCard) setCardsFor(top.id); else { closeMoment(); openBuilding(top.id); } }} />
         </View>
       )}
       {!top && (wearing || held) && (

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
-import { api, BulbuError, type BulbuDirective, type KingdomMoment, type LogResult, type Snapshot, type Swap } from "./api";
+import { api, BulbuError, type BulbuDirective, type Hand, type KingdomMoment, type LogResult, type Snapshot, type Swap } from "./api";
 
 /** What a new move did to the kingdom, played on Home: the fog rolls in or clears, the finish date slips or pulls back. */
 export interface Moment { key: number; items: KingdomMoment[]; swap: Swap | null }
@@ -24,6 +24,10 @@ interface Store {
   /** the kingdom moment waiting to play (or playing) on Home */
   moment: Moment | null;
   setMoment(m: Moment | null): void;
+  /** today's hand of cards */
+  hand: Hand | null;
+  /** play a card (you did it): the move goes in, the kingdom plays the moment, and Bulbu celebrates */
+  playCard(id: string): Promise<LogResult | null>;
   toast(text: string): void;
   toastText: string | null;
 }
@@ -39,6 +43,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [reaction, setReaction] = useState<BulbuDirective | null>(null);
   const [lastLog, setLastLog] = useState<LogResult | null>(null);
   const [moment, setMoment] = useState<Moment | null>(null);
+  const [hand, setHand] = useState<Hand | null>(null);
   const [toastText, setToast] = useState<string | null>(null);
 
   useEffect(() => { session.load().then(setUserId); }, []);
@@ -46,6 +51,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     if (!session.get()) { setState(null); return; }
     setLoading(true);
+    api.hand().then(setHand).catch(() => {});          // the hand comes along (dealt once a day, cheap after that)
     try { setState(await api.state()); setError(null); }
     catch (e) {
       if (e instanceof BulbuError && e.status === 401) { await session.set(null); setUserId(null); setState(null); }
@@ -72,11 +78,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     else if (r?.worldLevel && r.worldLevel.after > r.worldLevel.before) toast(`Level ${r.worldLevel.after}! Bulbu levelled up.`);
   }, [toast]);
 
+  const playCard = useCallback(async (id: string) => {
+    try {
+      const r = await api.playCard(id);
+      recordLog(r); setReaction(r.bulbu);
+      setHand(h => h && { ...h, cards: h.cards.filter(c => c.id !== id), played: h.played + 1 });
+      void refresh();
+      return r;
+    } catch (e) { toast((e as Error).message); return null; }
+  }, [recordLog, refresh, toast]);
+
   const value = useMemo<Store>(() => ({
-    userId, state, loading, error, refresh, reaction, setReaction, lastLog, setLastLog: recordLog, moment, setMoment, toast, toastText,
-    signIn: async (id: string) => { await session.set(id); setReaction(null); setLastLog(null); setMoment(null); setState(null); setUserId(id); },
+    userId, state, loading, error, refresh, reaction, setReaction, lastLog, setLastLog: recordLog, moment, setMoment, hand, playCard, toast, toastText,
+    signIn: async (id: string) => { await session.set(id); setReaction(null); setLastLog(null); setMoment(null); setHand(null); setState(null); setUserId(id); },
     signOut: async () => { await session.set(null); setUserId(null); setState(null); setReaction(null); },
-  }), [userId, state, loading, error, refresh, reaction, lastLog, recordLog, moment, toast, toastText]);
+  }), [userId, state, loading, error, refresh, reaction, lastLog, recordLog, moment, hand, playCard, toast, toastText]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
