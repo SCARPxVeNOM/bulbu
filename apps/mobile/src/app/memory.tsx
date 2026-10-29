@@ -34,7 +34,7 @@ export default function Memory() {
 
   return (
     <Screen>
-      <Header title="What Bulbu remembers" subtitle="Numbers live in your ledger. Meaning lives here. See, correct or delete anything." />
+      <Header title="What Bulbu remembers" subtitle="The forecasts come from what you did. What it means lives here. See, correct or delete anything." />
       {letter && <Card style={{ backgroundColor: "#F4F1FF", gap: 6 }}><Text style={T.b}>A letter from future you</Text><Text style={[T.body, { fontStyle: "italic" }]}>{letter.text}</Text><Text style={T.tiny}>{fmtDate(letter.at, { weekday: "long", day: "numeric", month: "short" })}</Text></Card>}
       {GROUPS.map(([kind, title, sub]) => {
         const list = state.facts.filter(f => f.kind === kind);

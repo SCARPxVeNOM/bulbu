@@ -81,7 +81,13 @@ export interface KingdomWhatIfView {
   stops: { value: number; label: string; buildings: (BuildingWhatIf & { id: BuildingId; name: string })[] }[];
 }
 export interface Hand { cards: Card[]; played: number; via: "spark" | "engine" }
-export interface ChatReply { reply: string; bulbu?: BulbuDirective; whatIf?: WhatIf; focus?: number; remembered?: string[]; via: string }
+/** "Ask before you choose": what a choice would do to each building, and one swap. Nothing was stored. */
+export interface ChoicePreview {
+  choice: string;
+  buildings: { id: BuildingId; name: string; goalTitle: string; days: number; equivalent: string; breakdown: Step[] }[];
+  swap: { title: string; detail: string } | null;
+}
+export interface ChatReply { reply: string; bulbu?: BulbuDirective; whatIf?: WhatIf; preview?: ChoicePreview; focus?: number; remembered?: string[]; via: string }
 
 /** One app's foreground time for a day, as Android's UsageStatsManager (or a parsed screenshot) reports it. */
 export interface UsageApp { name: string; package?: string; minutes: number; lastUsedAt?: string }

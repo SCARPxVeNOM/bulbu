@@ -22,20 +22,20 @@ export interface OutfitDef {
 export const OUTFITS: OutfitDef[] = [
   { id: "grad", name: "GradBulbu", tagline: "Celebrates learning milestones and motivates you to conquer your academic goals.",
     templates: ["learning", "dsa"], unlock: "Study for 5 hours in total", voice: "a proud study buddy: talks about chapters, revision and the next lecture" },
-  { id: "fit", name: "FitBulbu", tagline: "Keeps you moving, building healthy habits one workout at a time.",
+  { id: "fit", name: "FitBulbu", tagline: "Keeps you moving, raising the Arena one workout at a time.",
     templates: ["fitness"], unlock: "Finish 10 workouts", voice: "an upbeat training partner: short, energetic, counts reps and rest days" },
-  { id: "cozy", name: "CozyBulbu", tagline: "Encourages reading, reflection, and peaceful, productive routines.",
+  { id: "cozy", name: "CozyBulbu", tagline: "Encourages reading, reflection, and peaceful, productive evenings.",
     templates: ["reading"], unlock: "Read 200 pages", voice: "calm and warm: talks about pages, tea and quiet evenings" },
-  { id: "champ", name: "ChampBulbu", tagline: "Rewards consistency and celebrates the big wins along your journey.",
-    templates: [], unlock: "Keep a 7-day streak", voice: "a coach in your corner: celebrates streaks and consistency" },
+  { id: "champ", name: "ChampBulbu", tagline: "For a kingdom that keeps choosing well, and the big wins along the way.",
+    templates: [], unlock: "Make a good move 7 days running", voice: "a coach in your corner: celebrates showing up and the big wins" },
   { id: "tech", name: "TechBulbu", tagline: "Powers your coding sessions and cheers you toward your next breakthrough.",
     templates: ["dsa", "productivity"], unlock: "Solve 25 coding problems", voice: "a pair-programming buddy: one more test case, ship it, debug together" },
   { id: "nature", name: "NatureBulbu", tagline: "Inspires balanced living, mindful choices, and steady personal growth.",
     templates: ["custom"], unlock: "Have 3 balanced days: something productive and under 30 minutes of social media", voice: "gentle and grounded: balance, breathing room, steady growth" },
   { id: "dream", name: "DreamBulbu", tagline: "Represents your biggest ambitions and reminds you to keep reaching higher.",
     templates: ["savings", "iphone"], unlock: "Get any goal halfway there", voice: "a big-picture dreamer: talks about where the goal leads and reaching higher" },
-  { id: "party", name: "PartyBulbu", tagline: "Celebrates achievements, streaks, and every step worth being proud of.",
-    templates: [], unlock: "Earn 3 achievements", voice: "pure celebration: confetti energy, but still brief" },
+  { id: "party", name: "PartyBulbu", tagline: "Celebrates every raid held off and every step worth being proud of.",
+    templates: [], unlock: "Reach 3 kingdom milestones", voice: "pure celebration: confetti energy, but still brief" },
 ];
 
 export interface OutfitState extends OutfitDef { progress: number; detail: string; unlocked: boolean }
@@ -66,11 +66,11 @@ export function outfitStates(goals: Goal[], history: Activity[], now: Date): Out
     grad: [studyMin / 300, `${Math.floor(studyMin / 60)}h ${Math.round(studyMin % 60)}m of 5h`],
     fit: [workouts / 10, `${workouts} of 10 workouts`],
     cozy: [pages / 200, `${Math.round(pages)} of 200 pages`],
-    champ: [longest / 7, `${longest}-day best streak of 7`],
+    champ: [longest / 7, `${longest} of 7 days running`],
     tech: [problems / 25, `${Math.round(problems)} of 25 problems`],
     nature: [balanced / 3, `${balanced} of 3 balanced days`],
     dream: [best / 50, `best goal ${Math.round(best)}% of 50%`],
-    party: [earned / 3, `${earned} of 3 achievements`],
+    party: [earned / 3, `${earned} of 3 milestones`],
   };
   return OUTFITS.map(o => { const [raw, detail] = p[o.id]; const progress = Math.max(0, Math.min(1, raw)); return { ...o, progress, detail, unlocked: progress >= 1 }; });
 }

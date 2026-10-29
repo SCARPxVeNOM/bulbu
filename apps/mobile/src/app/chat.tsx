@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { FlatList, Image, KeyboardAvoidingView, Platform, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { ChatReply, WhatIf } from "@bulbu/api";
+import type { ChatReply, Step, WhatIf } from "@bulbu/api";
+import { fmtDays } from "@bulbu/engine";
 import { api } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import { fmtDate } from "@/lib/format";
@@ -21,6 +22,7 @@ export default function Chat() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [why, setWhy] = useState<WhatIf | null>(null);
+  const [pwhy, setPwhy] = useState<{ title: string; steps: Step[]; note?: string } | null>(null);
   const list = useRef<FlatList<Msg>>(null);
   const rec = useVoiceRecorder();
 
@@ -46,8 +48,9 @@ export default function Chat() {
       if (r.transcript) setText(x => (x ? x + " " : "") + r.transcript);
     } catch (e) { toast((e as Error).message); }
   };
-  const ideas: [string, string][] = [["Plan my day", "Plan my day around my goals"], ["Tips to avoid distraction", "I keep getting distracted while studying. What should I do?"],
-    ["Explain a concept", "Explain a concept I'm stuck on, step by step"], ["Be my study buddy", "Be my study buddy for the next session"]];
+  // "ask Bulbu before you act": what a choice will do, before you make it
+  const ideas: [string, string][] = [["About to order biryani?", "I'm about to order biryani for ₹380. What does that do to my kingdom?"], ["One more hour of reels?", "Should I scroll Instagram for another hour tonight?"],
+    ["Plan my evening", "Plan my evening so my buildings finish sooner"], ["Be my study buddy", "Be my study buddy for the next session"]];
 
   const Av = () => <Image source={RENDERS.avatar} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#EEF2FF" }} />;
   const Bot = ({ children }: { children: React.ReactNode }) => (
@@ -71,6 +74,17 @@ export default function Chat() {
             <Text style={T.tiny}>Tap to see the math</Text>
           </Card>
         )}
+        {m.extra?.preview && m.extra.preview.buildings.length > 0 && (
+          <Card tight style={{ gap: 6, shadowOpacity: 0, backgroundColor: m.extra.preview.buildings.some(b => b.days > 0) ? "#F3F0FF" : C.greenSoft }}>
+            <Text style={T.b}>Before you choose: {m.extra.preview.choice}</Text>
+            {m.extra.preview.buildings.map(b => (
+              <Text key={b.id} style={T.body} onPress={() => setPwhy({ title: `${b.name}: ${m.extra!.preview!.choice}`, steps: b.breakdown, note: b.equivalent })}>
+                {b.days > 0 ? "🌫️" : "✨"} {b.name}: <Text style={[T.b, { color: b.days > 0 ? "#5B4AA8" : C.green }]}>{fmtDays(Math.abs(b.days)).slice(1)} {b.days > 0 ? "later" : "sooner"}</Text>  <Text style={[T.tiny, { color: C.primary }]}>See why</Text>
+              </Text>
+            ))}
+            {m.extra.preview.swap && <Text style={T.small}>🃏 Swap: <Text style={T.b}>{m.extra.preview.swap.title}</Text>. {m.extra.preview.swap.detail}</Text>}
+          </Card>
+        )}
         {!!m.extra?.focus && <Btn small icon="play" title={`Start ${m.extra.focus}-min focus`} onPress={() => router.push("/focus")} />}
         {m.extra?.remembered?.map(r => <Pill key={r} tone="green" title="Saved to memory" />)}
       </View>
@@ -81,7 +95,7 @@ export default function Chat() {
     <Background>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <View style={{ paddingTop: Math.max(14, ins.top + 6), paddingHorizontal: 18 }}>
-          <Header title="Chat with Bulbu" subtitle="Ask anything. Get honest advice." />
+          <Header title="Ask Bulbu" subtitle="Before you choose, ask. Bulbu shows what it does to your kingdom, and one better swap." />
         </View>
         <FlatList ref={list} data={msgs} keyExtractor={(_, i) => String(i)} renderItem={render} contentContainerStyle={{ padding: 18, gap: 14, flexGrow: 1 }}
                   keyboardShouldPersistTaps="handled"
@@ -91,7 +105,7 @@ export default function Chat() {
           {msgs.length < 2 && <Chips wrap>{ideas.map(([l, q]) => <Chip key={l} title={l} onPress={() => send(q)} />)}</Chips>}
           <View style={[{ flexDirection: "row", gap: 6, alignItems: "center", backgroundColor: "#fff", borderRadius: 999, padding: 6, paddingLeft: 8 }, shadow]}>
             <Round name="clock" label="Focus timer" onPress={() => router.push("/focus")} />
-            <TextInput value={text} onChangeText={setText} placeholder={rec.recording ? "Listening…" : "Ask Bulbu anything..."} placeholderTextColor={C.muted} accessibilityLabel="Message"
+            <TextInput value={text} onChangeText={setText} placeholder={rec.recording ? "Listening…" : "About to… ? Ask Bulbu first"} placeholderTextColor={C.muted} accessibilityLabel="Message"
                        onSubmitEditing={() => send(text)} returnKeyType="send" style={{ flex: 1, fontFamily: F.medium, fontSize: 15, color: C.ink, paddingVertical: 8 }} />
             {rec.supported && <Round name="mic" live={rec.recording} label={rec.recording ? "Stop dictation" : "Dictate"} onPress={dictate} />}
             <Round primary name="send" label="Send" disabled={busy} onPress={() => send(text)} />
@@ -99,6 +113,7 @@ export default function Chat() {
         </View>
       </KeyboardAvoidingView>
       <Sheet open={!!why} onClose={() => setWhy(null)} title={why?.change.label ?? ""}>{why && <Breakdown steps={why.steps} />}</Sheet>
+      <Sheet open={!!pwhy} onClose={() => setPwhy(null)} title={pwhy?.title ?? ""}>{pwhy && <Breakdown steps={pwhy.steps} note={pwhy.note} />}</Sheet>
     </Background>
   );
 }

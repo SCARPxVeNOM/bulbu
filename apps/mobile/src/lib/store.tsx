@@ -15,10 +15,10 @@ interface Store {
   refresh(): Promise<void>;
   signIn(id: string): Promise<void>;
   signOut(): Promise<void>;
-  /** the last thing Bulbu said or did (from a log, chat or focus session) */
+  /** the last thing Bulbu said or did (after a move, a chat or a focus session) */
   reaction: BulbuDirective | null;
   setReaction(d: BulbuDirective | null): void;
-  /** the last log result, shown on the Activity Impact screen */
+  /** the last move's result (what it moved; the kingdom plays it as a moment) */
   lastLog: LogResult | null;
   setLastLog(r: LogResult | null): void;
   /** the kingdom moment waiting to play (or playing) on Home */
@@ -60,7 +60,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => { if (userId) refresh(); }, [userId, refresh]);
-  // the snapshot is time-based (streaks, nudges, today's tasks): refresh every minute and whenever the app comes back
+  // the snapshot is time-based (finish dates, raids, nudges, today's cards): refresh every minute and whenever the app comes back
   useEffect(() => {
     const t = setInterval(() => { if (AppState.currentState === "active") refresh(); }, 60_000);
     const sub = AppState.addEventListener("change", s => { if (s === "active") refresh(); });
@@ -69,7 +69,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const toast = useCallback((text: string) => { setToast(text); setTimeout(() => setToast(t => t === text ? null : t), 2800); }, []);
 
-  // every log goes through here, so a newly earned Bulbu is always announced
+  // every move goes through here, so a newly earned Bulbu is always announced
   const recordLog = useCallback((r: LogResult | null) => {
     setLastLog(r);
     setMoment(r?.moments?.length ? { key: Date.now(), items: r.moments, swap: r.swap } : null);

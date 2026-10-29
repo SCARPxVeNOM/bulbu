@@ -137,7 +137,7 @@ export function buyItem(goals: Goal[], history: Activity[], save: WorldSave, id:
   if (!it) return { error: `Unknown item "${id}"` };
   if (it.source !== "light") return { error: `${it.name} isn't sold in the shop. ${it.detail}.` };
   if (it.owned) return { error: `You already have ${it.name}.` };
-  if (inv.light < it.need) return { error: `You need ${it.need - inv.light} more Light. Every good habit makes Light.` };
+  if (inv.light < it.need) return { error: `You need ${it.need - inv.light} more Light. Every good choice collects Light.` };
   return { save: { ...save, spent: save.spent + it.need, owned: { ...save.owned, [id]: 1 } } };
 }
 

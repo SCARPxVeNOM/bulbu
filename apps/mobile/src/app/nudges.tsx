@@ -16,7 +16,7 @@ export default function Nudges() {
   const now = Date.now();
   return (
     <Screen>
-      <Header title="Nudges" subtitle="At most 3 a day, never during quiet hours, always with a swap." />
+      <Header title="Bulbu's tips" subtitle="At most 3 a day, never during quiet hours, always with a swap." />
       {state.nudges.map(n => (
         <Card key={n.id} style={{ borderLeftWidth: 4, borderLeftColor: C.primary }}>
           <Row style={{ alignItems: "flex-start" }} gap={12}>

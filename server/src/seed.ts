@@ -65,7 +65,7 @@ function aryan(now: Date): { goals: Goal[]; acts: Activity[]; facts: Omit<Fact, 
     goals: [dsa, read, fit], acts: list,
     facts: [
       { kind: "fact", text: "Has placement interviews in December", confidence: 0.95, source: "stated" },
-      { kind: "fact", text: "Works best late in the evening", confidence: 0.7, source: "inferred", detail: "Most solved problems are logged after 7 PM." },
+      { kind: "fact", text: "Works best late in the evening", confidence: 0.7, source: "inferred", detail: "Most problems get solved after 7 PM." },
       { kind: "fact", text: "Orders food when stressed", confidence: 0.55, source: "inferred" },
       { kind: "promise", text: "Keep Instagram under 1 hour on weekdays", confidence: 1, source: "stated", checkAt: addDays(now, 1).toISOString() },
       { kind: "win", text: "Solved 5 problems in one day for the first time", confidence: 1, source: "inferred" },

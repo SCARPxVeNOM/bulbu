@@ -1,5 +1,5 @@
 // Inventory: everything Bulbu can wear or carry. Four ways to get things:
-//   Level   your XP unlocks them      Streak  keep showing up
+//   Level   your XP unlocks them      Play    cards played and raids held off
 //   Shop    buy with Light            Real life  you bought the real thing, Bulbu gets one too
 // Anything you own levels up (1 → 3) with Light. Bulbu wears one outfit at a time, and has one real-life item to show
 // off: tap Bulbu and it holds your iPad up and looks at it (its emote).

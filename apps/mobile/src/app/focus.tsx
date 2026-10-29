@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Mode = "focus" | "short" | "long";
 const LEN: Record<Mode, number> = { focus: 25, short: 5, long: 15 };
-const LABEL: Record<Mode, string> = { focus: "Focus Session", short: "Short Break", long: "Long Break" };
+const LABEL: Record<Mode, string> = { focus: "Focus", short: "Short break", long: "Long break" };
 
 // keeps the phone's screen on during a session (browsers may refuse a wake lock, and expo-keep-awake throws then)
 function KeepAwake() { useKeepAwake(); return null; }
@@ -79,7 +79,7 @@ export default function Focus() {
       <ScrollView contentContainerStyle={{ paddingTop: Math.max(14, ins.top + 6), paddingHorizontal: 18, paddingBottom: 24 + ins.bottom, gap: 14, flexGrow: 1 }}>
         {raid
           ? <Header title={`Defend the ${raid.buildingName}`} subtitle={`25 minutes of focus holds off the ${raid.label} Dim raid. Bulbu's on the wall with you.`} />
-          : <Header title="Focus Mode" subtitle="Stay present. Bulbu is with you." right={<IconBtn soft name="settings" label="Profile" onPress={() => router.navigate("/profile")} />} />}
+          : <Header title="Focus" subtitle="Every focused minute collects Light for your kingdom. Bulbu is with you." right={<IconBtn soft name="settings" label="Profile" onPress={() => router.navigate("/profile")} />} />}
         {!raid && focusable.length > 1 && !running && <Chips>{focusable.map(g => <Chip key={g.id} title={g.title} on={g.id === goalId} onPress={() => setGoalId(g.id)} />)}</Chips>}
         <LiquidRing value={running ? (1 - frac) * 100 : 100}>
           <Text style={{ fontFamily: F.heavy, fontSize: 50, color: C.ink, fontVariant: ["tabular-nums"] }} accessibilityLabel={`${mm} minutes ${ss} seconds left`}>{mm}:{ss}</Text>

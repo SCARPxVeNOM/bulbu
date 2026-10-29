@@ -26,19 +26,19 @@ export default function Welcome() {
     <Screen scroll={false}>
       <View style={{ alignItems: "center", marginTop: 26 }}>
         <GelWordmark width={230} />
-        <Text style={{ fontFamily: F.heavy, fontSize: 22, color: C.ink, marginTop: 2, letterSpacing: 2 }}>WORLD</Text>
-        <Text style={{ fontFamily: F.medium, fontSize: 18, color: C.ink2, textAlign: "center", lineHeight: 25, marginTop: 6 }}>A world built by your habits.{"\n"}Start at level 0. Grow it every day.</Text>
+        <Text style={{ fontFamily: F.heavy, fontSize: 22, color: C.ink, marginTop: 2, letterSpacing: 2 }}>KINGDOM</Text>
+        <Text style={{ fontFamily: F.medium, fontSize: 18, color: C.ink2, textAlign: "center", lineHeight: 25, marginTop: 6 }}>See your future before you choose it.{"\n"}Your real choices build the kingdom.</Text>
       </View>
       <View style={{ flex: 1, minHeight: 300, borderRadius: 28, overflow: "hidden" }}>
         <Bulbu emote="focused" outfit={null} animation="Wave" cue={cue} view="full" background="#E7EEFF" onPoke={() => setCue(c => c + 1)} style={{ flex: 1 }} />
         <Text pointerEvents="none" style={{ position: "absolute", right: 10, top: 16, fontFamily: F.bold, fontSize: 19, lineHeight: 20, color: C.ink, textAlign: "center", transform: [{ rotate: "-14deg" }] }}>
-          Better{"\n"}Habits{"\n"}Brighter{"\n"}You ♡
+          Better{"\n"}Choices{"\n"}Brighter{"\n"}You ♡
         </Text>
       </View>
       <Row gap={7} style={{ justifyContent: "center" }}>
         {[0, 1, 2, 3].map(i => <View key={i} style={{ width: i ? 7 : 20, height: 7, borderRadius: 9, backgroundColor: i ? "#C9D2F2" : C.primary }} />)}
       </Row>
-      <Btn title="Start my world" icon="arrow" onPress={() => router.push("/signup")} />
+      <Btn title="Start my kingdom" icon="arrow" onPress={() => router.push("/signup")} />
       <View style={{ alignItems: "center" }}><LinkBtn title="Try a demo user" color={C.ink2} onPress={() => setDemo(true)} /></View>
 
       <Sheet open={demo} onClose={() => setDemo(false)} title="Demo users">

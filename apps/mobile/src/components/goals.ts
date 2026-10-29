@@ -17,7 +17,7 @@ export const DETAILS: Record<GoalTemplate, { title: string; target: number; targ
   productivity: { title: "Deep work", target: 100, targetLabel: "Focus hours", baseLabel: "Done so far" },
   custom: { title: "", target: 30, targetLabel: "Sessions", baseLabel: "Done so far" },
 };
-/** Where a goal's daily task takes you on the Log screen. */
+/** The kind of move a goal's daily task is. */
 export const TASK_LOG: Record<string, string> = {
   dsa: "code", reading: "read", fitness: "workout", savings: "save", iphone: "save", learning: "study", productivity: "focus", custom: "focus",
 };

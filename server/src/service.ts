@@ -1,14 +1,14 @@
-// What the app does: snapshot, log, chat, what-if, reflect, nudges. Engine for numbers, models for words and Bulbu's body.
+// What the app does: snapshot, moves (log), cards, raids, chat, what-if, reflect, nudges. Engine for numbers, models for words and Bulbu's body.
 import {
   achievements, addDays, allImpacts, inventory, lightOf, NEW_WORLD, worldState, classifyApp, costGoal, newlyUnlocked, outfitById, outfitStates, dayKey, fmtDays, fmtMinutes, fmtMoney, forecast, glowFor, impactsOf, insights,
   level, patterns, progressSeries, reactionFor, simulate, streak, swapFor, typicalOrder,
-  type Activity, type Category, type Change, type Emote, type Forecast, type Goal, type Impact, type WhatIf,
+  type Activity, type Category, type Change, type Emote, type Forecast, type Goal, type Impact, type Step, type WhatIf,
   kingdom, kingdomMoments, candidates, refreshCard, predictRaid, raidState, lootFor, defend, kingdomWhatIf, lateScroll, type Card, type Source, type Raid,
 } from "@bulbu/engine";
 import { store, uid, type Fact, type User } from "./db.ts";
 import { subtitleOf } from "./goals.ts";
 import { parseText, quickActivity } from "./parse.ts";
-import { ai, args, complete, CHAT_TOOLS, LOG_ACTIVITIES, PERSONA, SET_BULBU, type Msg, type Part, type ToolCall } from "./ai.ts";
+import { ai, args, complete, tidy, CHAT_TOOLS, LOG_ACTIVITIES, PERSONA, SET_BULBU, type Msg, type Part, type ToolCall } from "./ai.ts";
 
 export interface BulbuDirective { emote: Emote; animation: string; glow: number; line: string; via: "spark" | "engine" }
 
@@ -101,12 +101,12 @@ export interface LogInput {
 }
 
 const LINES: Record<Emote, string[]> = {
-  drained: ["It's okay, we all get distracted sometimes. One small step now?", "I'm running a little low… want to win the next hour back?"],
-  stressed: ["Okay, breathe. One small swap and we're right back on track.", "No stress. Next time, a cheaper swap gets us there sooner."],
-  thriving: ["That's {days} closer! I'm so proud of you.", "Look at you go. {days} closer already!"],
-  happy: ["Nice! Every small step counts.", "Consistency beats intensity. Nicely done."],
-  focused: ["Locked in. Let's keep this going.", "Deep focus mode. I'm right here with you."],
-  celebrating: ["WE DID IT! Goal complete!", "You actually did it! Celebration time!"],
+  drained: ["The Dim drifted in a little. One small move clears it. Want a card?", "I'm running a little low… want to win the next hour back?"],
+  stressed: ["Okay, breathe. One small swap and the kingdom's building again.", "No stress. Next time, a cheaper swap gets the Vault there sooner."],
+  thriving: ["That's {days} closer! The kingdom's glowing.", "Look at you go. {days} closer already!"],
+  happy: ["Nice! Every small move counts.", "Small moves add up. Nicely done."],
+  focused: ["Locked in. Let's keep building.", "Deep focus. I'm right here with you."],
+  celebrating: ["WE DID IT! Construction complete!", "You actually built it! Celebration time!"],
 };
 const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
 /** When Bulbu wears one of the eight outfits, Spark gets a hint so it sounds a little like that Bulbu. */
@@ -159,7 +159,7 @@ async function reactWithSpark(user: User, impacts: Impact[], acts: Activity[], f
       maxTokens: 200, tools: [SET_BULBU], toolChoice: "set_bulbu",
       messages: [
         { role: "system", content: PERSONA + outfitVoice(user) },
-        { role: "user", content: `${user.name} just logged: ${acts.map(a => a.label).join("; ")}.
+        { role: "user", content: `${user.name} just did: ${acts.map(a => a.label).join("; ")}.
 Engine results (exact, do not change the numbers): ${impacts.map(i => `${i.goalTitle}: ${fmtDays(i.days)} (${i.equivalent})`).join("; ") || "no goal impact"}.
 Suggested reaction: ${fallback.emote}. React through Bulbu's body with set_bulbu.` },
       ],
@@ -167,7 +167,7 @@ Suggested reaction: ${fallback.emote}. React through Bulbu's body with set_bulbu
     const c = msg.tool_calls?.[0];
     if (!c) return fallback;
     const a = args<Partial<BulbuDirective>>(c);
-    return { emote: (a.emote as Emote) ?? fallback.emote, animation: a.animation ?? fallback.animation, glow: a.glow ?? fallback.glow, line: a.line ?? fallback.line, via: "spark" };
+    return { emote: (a.emote as Emote) ?? fallback.emote, animation: a.animation ?? fallback.animation, glow: a.glow ?? fallback.glow, line: a.line ? tidy(a.line) : fallback.line, via: "spark" };
   } catch (e) { console.warn("[spark] reaction failed:", (e as Error).message); return fallback; }
 }
 
@@ -219,7 +219,7 @@ async function applyMoves(userId: string, moves: Omit<Activity, "id" | "source">
   const light = added.reduce((s, a) => s + lightOf(a), 0);
   const save = store.user(userId)?.world ?? NEW_WORLD;
   const lv = { before: worldState(goals, history, save, now).level, after: worldState(goals, after, save, now).level };
-  // things this unlocked in the inventory (a new level or a streak)
+  // things this unlocked in the inventory (a new level, or enough cards and raids)
   const had = new Set(inventory(goals, history, save, null, now).items.filter(i => i.owned).map(i => i.id));
   const items = inventory(goals, after, save, null, now).items.filter(i => i.owned && !had.has(i.id)).map(i => ({ id: i.id, name: i.name }));
   // the kingdom's moment: the buildings this moved, for the fog to roll in (or clear) and the ETA to slip (or pull back)
@@ -238,7 +238,6 @@ const DEAL_CARDS = { type: "function" as const, function: {
       line: { type: "string", description: "Max 10 words, plain and friendly, like a friend's text: when or why this one suits them (from what Bulbu knows). No metaphors, no numbers, never guilt. E.g. 'Your evenings are your best coding time'." },
     } } },
   } } } };
-const BANNED = /\b(track|tracker|tracking|log|logged|logging|monitor|habit|streak|insights?|dashboard)\b/i;
 
 /** Today's hand. Dealt once a day (Muse Spark picks three of the engine's cards and adds a line to each; offline the
  *  engine's first three); the numbers on each card are brought up to date every time. */
@@ -260,7 +259,7 @@ export async function hand(userId: string, now = new Date()) {
         });
         const call = msg.tool_calls?.[0];
         const picks = call ? args<{ cards: { id: string; line: string }[] }>(call).cards ?? [] : [];
-        const chosen = picks.map(p => { const c = pool.find(x => x.id === p.id); return c && { ...c, line: BANNED.test(p.line) ? undefined : p.line.trim() }; }).filter(Boolean).slice(0, 3) as Card[];
+        const chosen = picks.map(p => { const c = pool.find(x => x.id === p.id); return c && { ...c, line: p.line ? tidy(p.line.trim()) : undefined }; }).filter(Boolean).slice(0, 3) as Card[];
         if (chosen.length) { cards = [...chosen, ...pool.filter(c => !chosen.some(x => x.id === c.id))].slice(0, 3); via = "spark"; }
       } catch (e) { console.warn("[spark] deal failed:", (e as Error).message); }
     }
@@ -396,7 +395,49 @@ function goalsSummary(userId: string, now: Date) {
   };
 }
 
-export interface ChatOut { reply: string; bulbu?: BulbuDirective; whatIf?: WhatIf; focus?: number; remembered?: string[]; via: "spark" | "offline" }
+export interface ChatOut { reply: string; bulbu?: BulbuDirective; whatIf?: WhatIf; preview?: Preview; focus?: number; remembered?: string[]; via: "spark" | "offline" }
+
+// ------------------------------------------------------------------ ask before you choose
+
+export interface Preview {
+  choice: string;
+  buildings: { id: string; name: string; goalTitle: string; days: number; equivalent: string; breakdown: Step[] }[];
+  swap: { title: string; detail: string } | null;
+}
+type Move = Omit<Activity, "id" | "source">;
+const tidyChoice = (s: string) => s.replace(/^(i'?m |i am )?(about to|thinking (of|about)|going to|gonna|should i|can i|want to)\s+/i, "").replace(/^./, c => c.toUpperCase());
+
+/** A choice the user hasn't made yet ("about to order biryani for ₹380"), run through the engine: what it would do to
+ *  each building, and one swap (today's card for that building when there is one). Nothing is stored. */
+export function previewChoice(userId: string, moves: Move[], now = new Date()): Preview | null {
+  if (!moves.length) return null;
+  const goals = store.goals(userId), history = store.activities(userId), user = store.user(userId)!;
+  const acts: Activity[] = moves.map((a, i) => ({ ...a, id: `preview${i}`, source: "text" as const }));
+  const after = [...history, ...acts], k = kingdom(goals, history, now);
+  const by = new Map<string, Preview["buildings"][number]>();
+  for (const a of acts) for (const i of impactsOf(goals, after, a, now)) {
+    const b = k.buildings.find(x => x.goalId === i.goalId); if (!b) continue;
+    const cur = by.get(b.id) ?? { id: b.id, name: b.name, goalTitle: b.goalTitle, days: 0, equivalent: i.equivalent, breakdown: i.breakdown };
+    cur.days += i.days; by.set(b.id, cur);
+  }
+  const buildings = [...by.values()].filter(b => Math.abs(b.days) >= 0.05).sort((a, b) => b.days - a.days);
+  const worst = buildings.find(b => b.days > 0);
+  let swap: Preview["swap"] = null;
+  if (worst) {
+    const card = user.hand?.day === dayKey(now) ? user.hand.cards.find(c => c.building === worst.id && !user.hand!.played.includes(c.id)) : undefined;
+    const g = goals.find(x => x.title === worst.goalTitle);
+    const sw = g && swapFor(g, forecast(g, goals, history, now).pace);
+    swap = card ? { title: card.title, detail: `Your ${card.buildingName} card: ${fmtDays(-card.daysCloser).slice(1)} sooner instead` }
+      : sw ? { title: sw.title, detail: sw.detail } : null;
+  }
+  return { choice: moves.map(m => tidyChoice(m.label)).join(" + "), buildings, swap };
+}
+
+const previewReply = (p: Preview) => {
+  if (!p.buildings.length) return `${p.choice} doesn't slow any of your buildings. Your call!`;
+  const parts = p.buildings.map(b => `the ${b.name} ${fmtDays(Math.abs(b.days)).slice(1)} ${b.days > 0 ? "later" : "sooner"}`);
+  return `${p.choice} would put ${parts.join(" and ")}.${p.swap ? ` Swap: ${p.swap.title}. ${p.swap.detail}.` : ""}`;
+};
 
 export async function chat(userId: string, text: string, now = new Date()): Promise<ChatOut> {
   const user = store.user(userId)!;
@@ -406,6 +447,9 @@ export async function chat(userId: string, text: string, now = new Date()): Prom
     try { await chatWithSpark(user, text, now, out); }
     catch (e) { console.warn("[spark] chat failed:", (e as Error).message); out.via = "offline"; await chatOffline(user, text, now, out); }
   } else await chatOffline(user, text, now, out);
+  // whatever the model wrote stays in the kingdom's language
+  out.reply = tidy(out.reply);
+  if (out.bulbu?.line) out.bulbu = { ...out.bulbu, line: tidy(out.bulbu.line) };
   store.addMessage(userId, "assistant", out.reply);
   return out;
 }
@@ -448,6 +492,12 @@ async function runTool(user: User, c: ToolCall, now: Date, out: ChatOut) {
       return { ok: true };
     }
     case "start_focus": out.focus = args<{ minutes?: number }>(c).minutes ?? 25; return { ok: true };
+    case "preview_choice": {
+      const a = args<{ moves: { category: Category; label: string; minutes?: number; amount?: number; units?: number; app?: string }[] }>(c);
+      const p = previewChoice(user.id, (a.moves ?? []).map(m => ({ ...m, at: now.toISOString() })), now);
+      if (p) out.preview = p;
+      return p ?? { error: "Nothing to preview" };
+    }
     default: return { error: "unknown tool" };
   }
 }
@@ -460,6 +510,16 @@ export function remember(userId: string, kind: Fact["kind"], text: string, check
 
 async function chatOffline(user: User, text: string, now: Date, out: ChatOut) {
   const t = text.toLowerCase(), s = goalsSummary(user.id, now);
+  // "about to order biryani?": what the choice would do, before it's made
+  if (/\b(about to|thinking (of|about)|going to|gonna|should i|can i|want to)\b/.test(t) && !/what if/.test(t)) {
+    const p = previewChoice(user.id, parseText(text, store.goals(user.id), store.activities(user.id), now).activities, now);
+    if (p) {
+      out.preview = p; out.reply = previewReply(p);
+      const later = p.buildings.some(b => b.days > 0);
+      out.bulbu = { emote: later ? "focused" : "thriving", animation: later ? "Idle" : "Wave", glow: later ? 0.8 : 1, line: later && p.swap ? `Or: ${p.swap.title}?` : "Looks good!", via: "engine" };
+      return;
+    }
+  }
   if (/what if|what happens if|if i /.test(t)) {
     const w = await whatIf(user.id, text, now);
     if ("error" in w) { out.reply = w.error; return; }
@@ -517,11 +577,11 @@ export async function reflect(userId: string, now = new Date()) {
         { role: "system", content: `${PERSONA}\nYou are doing Bulbu's nightly reflection. Full activity history (at,category,minutes,amount,units,app,label):\n${csv}` },
         { role: "user", content: `Known memory:\n${store.facts(userId).map(f => `- [${f.kind}, ${f.source}, ${f.confidence.toFixed(2)}] ${f.text}`).join("\n")}
 Engine-detected patterns: ${found.map(p => p.text + " — " + p.detail).join("; ") || "none"}.
-Return JSON: {"facts":[{"text":"...","confidence":0-1}] (new things about the user you are fairly sure of and that are not already known; tendencies, not causes), "letter":"a 3-sentence warm note from the user's future self about this week"${raid ? `, "raid":"one line (max 16 words) Bulbu says to warn that a Dim raid is coming at ${raid.label}, heading for the ${raid.buildingName} (their ${raid.goalTitle} goal). Warm, a little playful, never guilt; it can mention that 25 minutes of focus holds it off. Never use the words track, log, monitor, habit or streak."` : ""}}` }] });
+Return JSON: {"facts":[{"text":"...","confidence":0-1}] (new things about the user you are fairly sure of and that are not already known; tendencies, not causes), "letter":"a 3-sentence warm note from the user's future self about this week, in the kingdom's language (their buildings, the Dim, Light)"${raid ? `, "raid":"one line (max 16 words) Bulbu says to warn that a Dim raid is coming at ${raid.label}, heading for the ${raid.buildingName} (their ${raid.goalTitle} goal). Warm, a little playful, never guilt; it can mention that 25 minutes of focus holds it off. Never use the words track, log, monitor, habit or streak."` : ""}}` }] });
       const j = JSON.parse(msg.content ?? "{}") as { facts?: { text: string; confidence: number }[]; letter?: string; raid?: string };
-      if (raid && j.raid && !/\b(track|log|monitor|habit|streak)\w*/i.test(j.raid)) raidLine = { id: raid.id, text: j.raid.trim() };
-      for (const f of j.facts ?? []) store.putFact(userId, { id: uid("f_"), kind: "fact", text: f.text, confidence: Math.min(0.9, f.confidence), source: "inferred", createdAt: iso, updatedAt: iso });
-      letter = j.letter ?? null; via = "wonder";
+      if (raid && j.raid) raidLine = { id: raid.id, text: tidy(j.raid.trim()) };
+      for (const f of j.facts ?? []) store.putFact(userId, { id: uid("f_"), kind: "fact", text: tidy(f.text), confidence: Math.min(0.9, f.confidence), source: "inferred", createdAt: iso, updatedAt: iso });
+      letter = j.letter ? tidy(j.letter) : null; via = "wonder";
     } catch (e) { console.warn("[wonder] reflection failed:", (e as Error).message); }
   }
   const u = store.user(userId);

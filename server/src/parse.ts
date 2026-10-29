@@ -28,8 +28,8 @@ const WORDS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, f
 
 function duration(s: string): number | undefined {
   let m = 0, hit = false;
-  const h = s.match(/(\d+(?:\.\d+)?|an?|one|two|three|four|five|six|half an?)\s*(h|hrs?|hours?)\b/i);
-  if (h) { const k = h[1].toLowerCase(); m += 60 * (k.startsWith("half") ? 0.5 : WORDS[k] ?? Number(k)); hit = true; }
+  const h = s.match(/(\d+(?:\.\d+)?|an?|another|one more|one|two|three|four|five|six|half an?)\s*(h|hrs?|hours?)\b/i);
+  if (h) { const k = h[1].toLowerCase(); m += 60 * (k.startsWith("half") ? 0.5 : k === "another" || k === "one more" ? 1 : WORDS[k] ?? Number(k)); hit = true; }
   const mm = s.match(/(\d+)\s*(m|mins?|minutes?)\b/i);
   if (mm) { m += Number(mm[1]); hit = true; }
   if (/\bhalf an hour\b/i.test(s) && !hit) { m = 30; hit = true; }

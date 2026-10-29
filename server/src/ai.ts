@@ -1,5 +1,5 @@
 // Meta Model API client. The API is OpenAI-compatible, so every model is called the same way.
-// Muse Spark: live chat, logging from text/voice/screenshots, Bulbu's body (tool calls), nudges. Muse Wonder: nightly reflection.
+// Muse Spark: live chat, reading moves from text/voice/screenshots, Bulbu's body (tool calls), cards, nudges. Muse Wonder: nightly reflection, the letter and the raid warning.
 // Models never do goal math: they call the engine (tools) and explain its result.
 
 const cfg = {
@@ -113,13 +113,27 @@ export const args = <T>(c: ToolCall): T => { try { return JSON.parse(c.function.
 
 // ------------------------------------------------------------------ prompts & tools
 
-export const PERSONA = `You are Bulbu, a small glowing lightbulb companion who helps the user reach their goals.
-Voice: warm, encouraging, brief, never shaming. Swaps, not guilt: always offer one small, specific action ("One DSA problem now = 3 days closer"), never "you wasted 2 hours".
-Phrases you like: "Consistency beats intensity." "Progress isn't linear, and that's okay." "It's okay, we all get distracted sometimes."
+export const PERSONA = `You are Bulbu, a small glowing lightbulb companion who rules a floating-island kingdom with the user. Every goal is a building (the main goal is the Castle), the forecast is when its construction finishes, and distraction is "the Dim": a fog that slows construction but never destroys anything. Light is what good choices collect.
+Voice: warm, encouraging, brief, never shaming. Swaps, not guilt: always offer one small, specific action ("One DSA problem now = the Library 3 days sooner"), never "you wasted 2 hours".
+Talk about the future and choices: forecast, build, defend, raid, collect, kingdom, choose, simulate. Never use these words: track, tracker, log, monitor, habit, streak, insights, dashboard.
+Phrases you like: "Small moves add up." "The Dim clears quickly." "It's okay, we all get distracted sometimes."
 Never invent numbers. Goal dates and "days closer/later" come only from the engine (tool results or numbers given to you). If you don't have a number, don't make one up.
 Usage data is per app: say "2h on Instagram", not "2h of Reels", unless the user said Reels.
 Nutrition and sleep feedback are trends, never medical advice. Patterns are tendencies, not proven causes.
 Keep replies short: 1-3 sentences in chat unless the user asks for more.`;
+
+/** Keep model-written text in the kingdom's language: the few words Bulbu never says, swapped for ones it does.
+ *  (The persona already asks for this; this catches a slip.) */
+export function tidy(text: string): string {
+  const keep = (m: string, w: string) => m[0] === m[0].toUpperCase() ? w[0].toUpperCase() + w.slice(1) : w;
+  const rules: [RegExp, string][] = [
+    [/\bon track\b/gi, "on course"], [/\bkeep track of\b/gi, "keep an eye on"], [/\btrack(?:ing|ed)?\b/gi, "follow"], [/\btrackers?\b/gi, "companion"],
+    [/\blogged\b/gi, "added"], [/\blogging\b/gi, "adding"], [/\blogs?\b/gi, "add"], [/\bmonitor(?:ing|ed)?\b/gi, "watch"],
+    [/\bhabits\b/gi, "routines"], [/\bhabit\b/gi, "routine"], [/\bstreaks\b/gi, "runs"], [/\bstreak\b/gi, "run"],
+    [/\binsights\b/gi, "ideas"], [/\binsight\b/gi, "idea"], [/\bdashboards?\b/gi, "kingdom"],
+  ];
+  return rules.reduce((t, [re, w]) => t.replace(re, m => keep(m, w)), text);
+}
 
 const EMOTES = ["happy", "focused", "drained", "stressed", "thriving", "celebrating"];
 export const SET_BULBU: Tool = { type: "function", function: {
@@ -128,7 +142,7 @@ export const SET_BULBU: Tool = { type: "function", function: {
   parameters: { type: "object", required: ["emote", "line"], properties: {
     emote: { type: "string", enum: EMOTES, description: "happy=content, focused=locked in, drained=droopy/low (long scroll, late night), stressed=frazzled (overspend, deadline), thriving=proud (good choice), celebrating=milestone" },
     animation: { type: "string", enum: ["Idle", "Wave", "Walk", "Celebrate", "Sleepy", "Jitter"] },
-    glow: { type: "number", minimum: 0.3, maximum: 1.2, description: "How brightly the bulb glows: bright when the week is on track, dim when drifting." },
+    glow: { type: "number", minimum: 0.3, maximum: 1.2, description: "How brightly the bulb glows: bright when the week is building well, dim when the Dim is drifting in." },
     line: { type: "string", description: "What Bulbu says, max ~15 words, in Bulbu's voice." },
   } } } };
 
@@ -164,6 +178,15 @@ export const CHAT_TOOLS: Tool[] = [
     name: "remember", description: "Save something about the user to memory: a fact they stated, or a promise Bulbu should check back on.",
     parameters: { type: "object", required: ["kind", "text"], properties: {
       kind: { type: "string", enum: ["fact", "promise"] }, text: { type: "string" }, check_in_days: { type: "number" },
+    } } } },
+  { type: "function", function: {
+    name: "preview_choice", description: "Before the user acts: run a choice they're about to make (\"about to order biryani for ₹380\", \"one more hour of Instagram\") through the forecasting engine. Returns what it would do to each building and one swap. Nothing is saved. Use it whenever the user asks about something they haven't done yet.",
+    parameters: { type: "object", required: ["moves"], properties: {
+      moves: { type: "array", items: { type: "object", required: ["category", "label"], properties: {
+        category: { type: "string", enum: ["study", "code", "read", "workout", "sleep", "eat", "social_media", "spend", "save", "focus", "other"] },
+        label: { type: "string", description: "Short, e.g. 'Biryani from Swiggy', '1h on Instagram'" },
+        minutes: { type: "number" }, amount: { type: "number", description: "Money in rupees" }, units: { type: "number" }, app: { type: "string" },
+      } } },
     } } } },
   { type: "function", function: { name: "start_focus", description: "Offer to start a focus session in Focus Mode.", parameters: { type: "object", properties: { minutes: { type: "number" } } } } },
 ];

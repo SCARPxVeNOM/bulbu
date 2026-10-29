@@ -36,7 +36,7 @@ export default function Setup() {
     <Screen footer={<Btn title="Continue" icon="arrow" disabled={!sel.length} onPress={toDetail} />}>
       <Header back="/signup" />
       <Text style={T.titleL}>What do you want to grow?</Text>
-      <Text style={T.muted}>Pick a few. Each one becomes part of your Bulbu World. You can add more later.</Text>
+      <Text style={T.muted}>Pick a few. Each one becomes a building in your kingdom. You can build more later.</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
         {TEMPLATES.map(([t, label]) => {
           const on = sel.includes(t);
@@ -54,9 +54,9 @@ export default function Setup() {
   );
 
   return (
-    <Screen footer={<Btn title="Enter Bulbu World" icon="arrow" busy={busy} onPress={finish} />}>
+    <Screen footer={<Btn title="Enter the kingdom" icon="arrow" busy={busy} onPress={finish} />}>
       <Header back={false} title="Your goals" right={<LinkBtn title="Edit" onPress={() => setStep("pick")} />} />
-      <Text style={[T.muted, { textAlign: "center" }]}>Bulbu turns every activity into days closer or further from these. The first one is your main focus.</Text>
+      <Text style={[T.muted, { textAlign: "center" }]}>Bulbu forecasts when each one finishes and shows what every choice does to it, before you make it. The first one is your Castle: your main goal.</Text>
       {sel.map(t => (
         <Card key={t} style={{ gap: 12 }}>
           <Row><GlossyIcon name={t} size={36} /><Text style={[T.b, { fontSize: 16 }]}>{TEMPLATES.find(o => o[0] === t)![1]}</Text></Row>
