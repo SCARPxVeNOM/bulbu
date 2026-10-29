@@ -1,7 +1,7 @@
 import "@/lib/ignore-extension-errors";
 import { useEffect } from "react";
 import { Image, Platform, Text, View } from "react-native";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
@@ -12,6 +12,7 @@ import { StoreProvider, useStore } from "@/lib/store";
 import { Background, Btn, Toast } from "@/components/ui";
 import { API_URL } from "@/lib/api";
 import { useAutoUsageSync } from "@/lib/usage";
+import { onRaidAlertTap, syncRaidAlert } from "@/lib/raidAlert";
 import { C, T } from "@/theme";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -22,6 +23,10 @@ function Root() {
   const ready = fonts && userId !== undefined;
   useAutoUsageSync(!!userId && !!state, () => refresh());
   useEffect(() => { if (ready) SplashScreen.hideAsync().catch(() => {}); }, [ready]);
+  // the Dim raid warning: a notification half an hour before, which opens Defend
+  const raid = state?.raid ?? null;
+  useEffect(() => { void syncRaidAlert(raid); }, [raid?.id, raid?.at, raid?.state, raid?.line]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => onRaidAlertTap(url => router.push(url as never)), []);
   if (!ready) return null;
   const signedIn = !!userId;
 

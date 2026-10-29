@@ -6,6 +6,8 @@
 //   k.set({ buildings: [{ id: "Library", level: 3, building: true, glow: 0.6, fog: 0.2 }, …], plots: ["Vault"],
 //           treasure: { photo, mask, box } | null });
 //   k.anchors()   // { Library: [x, y, z], … } world points above each building, for the ETA labels
+//   k.set({ …, raid: { id: "Castle", state: "coming" | "striking" | "defended", near: 0..1 } | null })   // a Dim raid's
+//                 storm over its target: thicker as it nears, flickering while it strikes, scattering when held off
 //   k.moment({ id: "Library", kind: "dim", fogFrom: 0, fogTo: 0.7, glowFrom, glowTo })   // play an event on a building:
 //                 "dim" rolls the fog in from round it and dims it; "light" blows the fog away and flares it up
 //
@@ -98,7 +100,7 @@ function island(THREE) {
 
 // ------------------------------------------------------------------ the stage
 export function createKingdom({ url }) {
-  let want = { buildings: [], plots: [], treasure: null };
+  let want = { buildings: [], plots: [], treasure: null, raid: null };
   let ctl = null, pending = null;
   const stage = {
     orbit: true,
@@ -109,7 +111,7 @@ export function createKingdom({ url }) {
   };
   return {
     stage,
-    set(s) { want = { buildings: s.buildings ?? [], plots: s.plots ?? [], treasure: s.treasure ?? null }; ctl?.apply(); },
+    set(s) { want = { buildings: s.buildings ?? [], plots: s.plots ?? [], treasure: s.treasure ?? null, raid: s.raid ?? null }; ctl?.apply(); },
     anchors() { return ctl ? ctl.anchors() : {}; },
     moment(m) { if (ctl) ctl.moment(m); else pending = m; },
   };
@@ -153,6 +155,17 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
     root.add(g);
     return { group: g, mat, puffs, now: 0, center: c };
   }
+
+  // the Dim raid: a dark storm that gathers over its target building
+  const stormMat = new THREE.SpriteMaterial({ map: puffTex, color: "#3F3570", transparent: true, opacity: 0, depthWrite: false });
+  const storm = new THREE.Group(); storm.name = "DimRaid"; storm.visible = false; root.add(storm);
+  const stormPuffs = [];
+  for (let i = 0; i < 9; i++) {
+    const p = new THREE.Sprite(stormMat), a = (i / 9) * Math.PI * 2;
+    p.userData = { a, r: 1.25 + (i % 3) * 0.35, y: (i % 2) * 0.45, s: 1.7 + (i % 4) * 0.35 };
+    p.renderOrder = 4; storm.add(p); stormPuffs.push(p);
+  }
+  let stormNow = 0, stormGone = 0, stormFor = null;
 
   new GLTFLoader().load(url, gltf => {
     const k = gltf.scene; mark(k); root.add(k);
@@ -249,6 +262,15 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
       b.level = level; b.shown = !!st;
       b.target = { glow: st ? st.glow : 0, fog: st ? st.fog : 0 };
     }
+    // the raid's storm sits over its target; when it's held off it scatters, then goes
+    const r = s.raid, tb = r && B[r.id];
+    if (tb && r.state !== "defended") {
+      tb.node.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(tb.node), c = box.getCenter(new THREE.Vector3());
+      storm.position.set(c.x, box.max.y - 0.7, c.z); root.worldToLocal(storm.position);   // round the roof, under its label
+      stormFor = { state: r.state, near: Math.max(0, Math.min(1, r.near ?? 0.5)) }; stormGone = 0;
+    } else if (stormFor && r?.state === "defended") stormFor = { ...stormFor, state: "defended" };
+    else if (!r) stormFor = null;
     // the treasure floats just above the castle's roof, wherever the roof is now
     const cr = B.Castle?.roof;
     if (treasureAt && cr) treasureAt.position.y = cr.position.y + 2.2;
@@ -305,6 +327,24 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
         if (p >= 1) { fl.scale.set(1, 1, 1); b.pop.delete(fl); }
       }
     }
+    // the raid's storm: gathers with how near it is, flickers while it strikes, scatters once held off
+    if (stormFor) {
+      const held = stormFor.state === "defended";
+      if (held) stormGone = Math.min(1, stormGone + dt / 2.2);
+      const want = held ? 0 : stormFor.state === "striking" ? 0.92 : 0.5 + 0.35 * stormFor.near;
+      stormNow += (want - stormNow) * (1 - Math.exp(-dt * 1.5));
+      const flash = stormFor.state === "striking" && Math.sin(t * 9.1) * Math.sin(t * 2.3) > 0.93 ? 1 : 0;
+      stormMat.color.set(flash ? "#9C8CFF" : "#3F3570");
+      stormMat.opacity = Math.min(0.85, stormNow) * (1 - stormGone);
+      storm.visible = stormMat.opacity > 0.01;
+      const spread = 1 + stormGone * 2.2;
+      for (const p of stormPuffs) {
+        const u = p.userData, a = u.a + t * 0.12;
+        p.position.set(Math.cos(a) * u.r * spread, u.y + Math.sin(t * 0.8 + u.a) * 0.08 + stormGone * 0.8, Math.sin(a) * u.r * spread);
+        const sc = u.s * (0.7 + 0.3 * stormNow); p.scale.set(sc * 1.4, sc * 0.65, 1);
+      }
+      if (held && stormGone >= 1) { stormFor = null; storm.visible = false; }
+    } else storm.visible = false;
     orbGroup.position.y = Math.sin(t * 1.4) * 0.12; orb.rotation.y += dt * 0.8; ring.rotation.z += dt * 0.5;
     orbMat.emissiveIntensity = 0.8 + 0.25 * Math.sin(t * 2.2);
     if (treasure) treasure.position.y = Math.sin(t * 1.4) * 0.12 + 0.2;

@@ -11,7 +11,7 @@ const STARTER_LIGHT = 100;
 import { store, uid, type Fact, type User } from "./db.ts";
 import { makeGoal } from "./goals.ts";
 import { seed, seedIfEmpty, DEMO_USERS } from "./seed.ts";
-import { snapshot, log, chat, whatIf, reflect, remember, hand, playCard, type LogInput } from "./service.ts";
+import { snapshot, log, chat, whatIf, reflect, remember, hand, playCard, defendRaid, type LogInput } from "./service.ts";
 import { ai, transcribe } from "./ai.ts";
 import { ingestUsage, type UsageInput } from "./usage.ts";
 import { cutout, dataUrlBytes, drawBulbuWith, dropMedia, identify, mediaPath, note, saveMedia } from "./purchase.ts";
@@ -90,6 +90,8 @@ app.delete("/api/goals/:id", c => { store.deleteGoal(c.get("uid"), c.req.param("
 app.post("/api/log", async c => c.json(await log(c.get("uid"), await c.req.json<LogInput>())));
 // cards: today's hand (dealt once a day), and playing one (you did it in real life)
 app.get("/api/cards", async c => c.json(await hand(c.get("uid"))));
+// Dim raids: a Defend session ended (minutes of focus); held off if long enough, with loot
+app.post("/api/raids/defend", async c => { const b = await c.req.json<{ id: string; minutes: number }>(); return c.json(await defendRaid(c.get("uid"), b.id, b.minutes)); });
 app.post("/api/cards/play", async c => c.json(await playCard(c.get("uid"), (await c.req.json<{ id: string }>()).id)));
 app.delete("/api/activities/:id", c => { store.deleteActivity(c.get("uid"), c.req.param("id")); return c.json({ ok: true }); });
 app.post("/api/whatif", async c => c.json(await whatIf(c.get("uid"), (await c.req.json<{ text: string }>()).text)));

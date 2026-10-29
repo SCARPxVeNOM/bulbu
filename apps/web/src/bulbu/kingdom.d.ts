@@ -2,7 +2,8 @@
 export const KINGDOM_IDS: string[];
 export interface KingdomBuildingView { id: string; level: number; building: boolean; glow: number; fog: number }
 export interface KingdomTreasure { photo: string; mask?: string; box?: { left: number; top: number; right: number; bottom: number } }
-export interface KingdomView { buildings: KingdomBuildingView[]; plots: string[]; treasure?: KingdomTreasure | null }
+export interface KingdomRaidView { id: string; state: "coming" | "striking" | "defended"; near?: number }
+export interface KingdomView { buildings: KingdomBuildingView[]; plots: string[]; treasure?: KingdomTreasure | null; raid?: KingdomRaidView | null }
 export function paintKingdomSky(ctx: CanvasRenderingContext2D, W: number, H: number): void;
 export function createKingdom(o: { url: string }): {
   stage: unknown;

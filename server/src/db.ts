@@ -34,6 +34,8 @@ export interface User {
   world?: WorldSave;
   /** the last reaction, so Bulbu looks the same when the app reopens */
   mood?: { emote: string; at: string };
+  /** Muse Wonder's warning for the next Dim raid (written in the nightly reflection) */
+  raidLine?: { id: string; text: string };
   /** today's hand of cards (dealt once a day), and the ones already played */
   hand?: { day: string; cards: Card[]; played: string[]; via: "spark" | "engine" };
   /** nudge kinds the user dismissed, so Bulbu sends fewer of them */

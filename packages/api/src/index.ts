@@ -2,11 +2,11 @@
 // Pass `getUserId` from wherever the app keeps the session (localStorage on web, AsyncStorage / SecureStore on RN).
 import type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment, Card,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment, Card, Raid, RaidState, Loot,
 } from "@bulbu/engine";
 export type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment, Card,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment, Card, Raid, RaidState, Loot,
 };
 
 /** "sweater" and "hoodie" are the built-in outfits; the eight Bulbus are OutfitIds; null is no outfit. */
@@ -38,6 +38,8 @@ export interface Snapshot {
   world: WorldState;
   /** Bulbu's Kingdom: a building per goal, with its level, construction ETA, glow and fog */
   kingdom: KingdomState;
+  /** the next Dim raid, or null until there's a pattern to predict it from */
+  raid: RaidView | null;
   /** everything Bulbu can wear or carry, and how each is earned */
   inventory: Inventory;
   ai: { enabled: boolean; models: { spark: string; wonder: string } };
@@ -67,6 +69,10 @@ export interface LogResult {
   needsText?: boolean;
   message?: string;
 }
+/** The next Dim raid as the app shows it. `loot` is what holding it off drops (or did drop, once defended). */
+export interface RaidView extends Raid { state: RaidState; loot: Loot; line: string }
+/** A Defend session's result: the move (like a log), and whether the raid was held off. */
+export interface DefendResult extends Partial<LogResult> { raid: { held: true; loot: Loot } | { held: false; message: string } }
 export interface Hand { cards: Card[]; played: number; via: "spark" | "engine" }
 export interface ChatReply { reply: string; bulbu?: BulbuDirective; whatIf?: WhatIf; focus?: number; remembered?: string[]; via: string }
 
@@ -177,6 +183,8 @@ export function createBulbuClient(o: ClientOptions = {}) {
     hand: () => call<Hand>("GET", "/cards"),
     /** play a card: you did it in real life; returns what it moved, like a log */
     playCard: (id: string) => call<LogResult>("POST", "/cards/play", { id }),
+    /** a Defend session ended after `minutes` of focus */
+    defendRaid: (id: string, minutes: number) => call<DefendResult>("POST", "/raids/defend", { id, minutes }),
     tutorial: (step: number, gift = false) => call<WorldState>("POST", "/world/tutorial", { step, gift }),
     inventory: () => call<Inventory>("GET", "/inventory"),
     buyItem: (id: string) => call<Inventory>("POST", `/inventory/${q(id)}/buy`),

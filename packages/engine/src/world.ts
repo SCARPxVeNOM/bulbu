@@ -31,6 +31,10 @@ export interface WorldSave {
   owned?: Record<string, number>;
   /** things bought in real life */
   real?: RealItem[];
+  /** Dim raids held off, by raid id (the day), with the Light they dropped */
+  raids?: Record<string, { at: string; light: number }>;
+  /** loot pieces collected toward an item (three Cape pieces make the Hero Cape) */
+  pieces?: Record<string, number>;
 }
 export const NEW_WORLD: WorldSave = { spent: 0, gift: 0, tutorial: 0, owned: {}, real: [] };
 

@@ -18,6 +18,7 @@ import { Hud } from "@/components/world/Hud";
 import { Tour } from "@/components/world/Tour";
 import { MomentCard } from "@/components/world/MomentCard";
 import { HandButton, HandSheet } from "@/components/world/Hand";
+import { RaidChip, RaidSheet } from "@/components/world/Raid";
 import { GlossyIcon } from "@/components/GlossyIcon";
 import { tap } from "@/components/ui";
 import { C, F } from "@/theme";
@@ -34,6 +35,10 @@ function kingdomView(s: Snapshot, moments: KingdomMoment[] = []) {
     buildings: k.buildings.map(b => ({ id: b.id, level: b.level, building: b.building, glow: b.glow, fog: b.fog })),
     plots: k.plots,
     treasure: treasureOf(s),
+    // the next Dim raid's storm over its target, thicker as it nears (six hours out to the hour it strikes)
+    raid: s.raid && s.raid.state !== "passed"
+      ? { id: s.raid.building, state: s.raid.state, near: Math.round(Math.max(0, 1 - (+new Date(s.raid.at) - +new Date(s.now)) / (6 * 3600_000)) * 20) / 20 }
+      : null,
   };
   const labels: KingdomLabel[] = [
     ...k.buildings.map(b => {
@@ -72,6 +77,7 @@ export default function Home() {
   const ins = useSafeAreaInsets();
   // the hand sheet: false when closed, otherwise the building whose card goes first (or null)
   const [cardsFor, setCardsFor] = useState<string | null | false>(false);
+  const [raidOpen, setRaidOpen] = useState(false);
   const top = moment?.items[0] ?? null;
   // the 3D side of the moment: the biggest shift plays on its building
   const play = useMemo(() => top && moment ? {
@@ -106,7 +112,8 @@ export default function Home() {
              gear={held?.hold ? held.id : null} gearColor={held?.mine?.color}
              line={world.tutorial >= 0 || top ? null : reaction?.line} animation={dimming ? "Sleepy" : reaction?.animation} cue={moment?.key ?? (reaction ? 1 : 0)} style={{ position: "absolute", inset: 0 }} />
       <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, top: 0, paddingTop: Math.max(12, ins.top + 4), paddingHorizontal: 14 }}>
-        <Hud world={world} name={state.user.name} nudges={state.nudges.length} />
+        <Hud world={world} name={state.user.name} nudges={state.nudges.length}
+             extra={state.raid && <RaidChip raid={state.raid} onPress={() => setRaidOpen(true)} />} />
       </View>
 
       {/* the inventory, like a game's bag button (out of the way while a moment's card is up) */}
@@ -127,6 +134,7 @@ export default function Home() {
           <HandButton cards={cards} onPress={() => setCardsFor(null)} />
         </View>
       )}
+      {state.raid && <RaidSheet raid={state.raid} open={raidOpen} onClose={() => setRaidOpen(false)} />}
       <HandSheet open={cardsFor !== false} focus={cardsFor || null} cards={cards} onClose={() => setCardsFor(false)}
                  onPlay={async c => { const r = await playCard(c.id); if (r) setCardsFor(false); }} />
       {top && (

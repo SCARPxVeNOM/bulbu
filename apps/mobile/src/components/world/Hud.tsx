@@ -1,5 +1,6 @@
 // The game bar over Bulbu: level + XP on the left, Light on the right (like a game's resource bar), then today's
 // Light, the streak, and a warning when today has more scrolling than good habits.
+import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -13,7 +14,8 @@ import { LightIcon } from "./LightIcon";
 const pill = { backgroundColor: "rgba(255,255,255,.88)", borderRadius: 999, borderWidth: 1.5, borderColor: "#fff",
   shadowColor: "#3448BE", shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 } as const;
 
-export function Hud({ world, name, nudges }: { world: WorldState; name: string; nudges: number }) {
+/** `extra`: more chips for the second row (the Dim raid warning) */
+export function Hud({ world, name, nudges, extra }: { world: WorldState; name: string; nudges: number; extra?: ReactNode }) {
   return (
     <View style={{ gap: 10 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -42,6 +44,7 @@ export function Hud({ world, name, nudges }: { world: WorldState; name: string; 
         <View style={{ flexDirection: "row", gap: 8, flexShrink: 1, flexWrap: "wrap" }}>
           <Chip text={`🔥 ${world.streak}-day streak`} tone="orange" />
           {world.earnedToday > 0 && <Chip text={`+${world.earnedToday} Light today`} />}
+          {extra}
           {world.fog > 0.3 && <Chip text="Too much scrolling today" warn />}
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel={nudges ? `Bulbu's tips, ${nudges} new` : "Bulbu's tips"} onPress={() => { tap(); router.push("/nudges"); }}

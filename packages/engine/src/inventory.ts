@@ -29,6 +29,8 @@ export interface ItemDef {
 }
 
 export const MAX_ITEM_LEVEL = 3;
+/** shop items that Dim raids drop pieces of, and how many make one (kept in step with raids.ts) */
+export const RAID_PIECES: Record<string, number> = { cape: 3, crown: 5 };
 /** Light to go from level 1→2 and 2→3 */
 export const UPGRADE_COST = [200, 500];
 
@@ -102,7 +104,13 @@ export function inventory(goals: Goal[], history: Activity[], save: WorldSave, e
     let has = false, progress = 0, detail = "";
     if (d.source === "level") { has = w.level >= d.need; progress = d.need ? Math.min(1, w.xp / xpAt(d.need)) : 1; detail = has ? "Unlocked by your level" : `Reach level ${d.need} · you're level ${w.level}`; }
     if (d.source === "streak") { has = w.bestStreak >= d.need; progress = Math.min(1, w.bestStreak / d.need); detail = has ? `Unlocked by a ${d.need}-day streak` : `Keep a ${d.need}-day streak · best so far ${w.bestStreak} ${w.bestStreak === 1 ? "day" : "days"}`; }
-    if (d.source === "light") { has = !!owned[d.id]; progress = Math.min(1, w.light / d.need); detail = has ? "Bought in the shop" : `${d.need} Light in the shop`; }
+    if (d.source === "light") {
+      // shop items can also be pieced together from Dim raid loot
+      const got = save.pieces?.[d.id] ?? 0, of = RAID_PIECES[d.id];
+      has = !!owned[d.id]; progress = Math.max(Math.min(1, w.light / d.need), of ? got / of : 0);
+      detail = has ? (of && got >= of ? "Pieced together from raid loot" : "Bought in the shop")
+        : got && of ? `${d.need} Light in the shop, or ${of - got} more raid ${of - got === 1 ? "piece" : "pieces"} (${got} of ${of})` : `${d.need} Light in the shop`;
+    }
     if (d.source === "real") { has = !!r || fromGoals.has(d.id); progress = has ? 1 : 0; detail = has ? (r ? "You bought the real thing" : "You reached the goal for it") : "Bought it in real life? Add it and Bulbu gets one too"; }
     const level = has ? Math.max(1, Math.min(MAX_ITEM_LEVEL, owned[d.id] ?? 1)) : 0;
     return {

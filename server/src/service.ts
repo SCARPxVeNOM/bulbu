@@ -3,7 +3,7 @@ import {
   achievements, addDays, allImpacts, inventory, lightOf, NEW_WORLD, worldState, classifyApp, costGoal, newlyUnlocked, outfitById, outfitStates, dayKey, fmtDays, fmtMinutes, fmtMoney, forecast, glowFor, impactsOf, insights,
   level, patterns, progressSeries, reactionFor, simulate, streak, swapFor, typicalOrder,
   type Activity, type Category, type Change, type Emote, type Forecast, type Goal, type Impact, type WhatIf,
-  kingdom, kingdomMoments, candidates, refreshCard, type Card, type Source,
+  kingdom, kingdomMoments, candidates, refreshCard, predictRaid, raidState, lootFor, defend, type Card, type Source, type Raid,
 } from "@bulbu/engine";
 import { store, uid, type Fact, type User } from "./db.ts";
 import { subtitleOf } from "./goals.ts";
@@ -49,9 +49,43 @@ export function snapshot(userId: string, now = new Date()) {
     outfits: outfitStates(goals, acts, now), letter: user.letter ?? null,
     world: worldState(goals, acts, user.world ?? NEW_WORLD, now),
     kingdom: kingdom(goals, acts, now),
+    raid: raidView(user, goals, acts, now),
     inventory: inventory(goals, acts, user.world ?? NEW_WORLD, user.outfit, now, user.gear ?? null),
     ai: { enabled: ai.enabled, models: ai.models }, now: now.toISOString(),
   };
+}
+
+// ------------------------------------------------------------------ Dim raids
+
+/** The next raid as the app shows it: when, where, why, what it would cost, and the loot for holding it off. */
+function raidView(user: User, goals: Goal[], acts: Activity[], now: Date) {
+  const r = predictRaid(goals, acts, now);
+  if (!r) return null;
+  const save = user.world ?? NEW_WORLD, state = raidState(r, save, now);
+  const won = save.raids?.[r.id];
+  return {
+    ...r, state, loot: state === "defended" ? { light: won!.light } : lootFor(r, save),
+    line: user.raidLine?.id === r.id ? user.raidLine.text : `A Dim raid is coming at ${r.label}. It's heading for the ${r.buildingName}.`,
+  };
+}
+
+/** A Defend session ended: it goes in as a move, and if it was long enough (and in time) the raid is held off and
+ *  drops its loot. */
+export async function defendRaid(userId: string, raidId: string, minutes: number, now = new Date()) {
+  const user = store.user(userId)!, goals = store.goals(userId), acts = store.activities(userId);
+  const r = predictRaid(goals, acts, now);
+  if (!r || r.id !== raidId) throw Object.assign(new Error("That raid isn't on any more."), { status: 404 });
+  const out = defend(r, user.world ?? NEW_WORLD, Math.round(minutes), now);
+  const held = !("error" in out);
+  if (held) store.putUser({ ...user, world: out.save });
+  if (minutes < 5) return { raid: { held: false, message: "error" in out ? out.error : "" } };   // too short to count as a move
+  const g = goals.find(x => x.id === r.goalId);
+  const move = { at: now.toISOString(), category: "focus" as const, minutes: Math.round(minutes), goalId: g && g.kind !== "savings" ? g.id : undefined,
+                 label: held ? `Defended the ${r.buildingName}` : `Focus session · ${r.buildingName}` };
+  const res = await applyMoves(userId, [move], "focus", [], "quick", now, held ? (_i, fb) => ({
+    ...fb, emote: "celebrating", animation: "Celebrate", glow: Math.max(fb.glow, 1), via: "engine", line: `Raid held off! The ${r.buildingName} is safe.`,
+  }) : undefined);
+  return { ...res, raid: held ? { held: true, loot: out.loot } : { held: false, message: out.error } };
 }
 
 // ------------------------------------------------------------------ logging
@@ -430,6 +464,9 @@ export async function reflect(userId: string, now = new Date()) {
     if (f.source === "inferred" && f.kind === "fact" && +now - +new Date(f.updatedAt) > 21 * 86400_000) store.putFact(userId, { ...f, confidence: f.confidence * 0.8, updatedAt: iso });
   }
   let letter: string | null = null, via: "wonder" | "engine" = "engine";
+  // the next Dim raid: the engine predicts it, Muse Wonder writes the warning
+  const raid: Raid | null = predictRaid(store.goals(userId), acts, now);
+  let raidLine: { id: string; text: string } | undefined;
   if (ai.enabled) {
     // Muse Wonder reads the whole month in one pass. The history goes first so it stays a cacheable prefix.
     try {
@@ -438,14 +475,15 @@ export async function reflect(userId: string, now = new Date()) {
         { role: "system", content: `${PERSONA}\nYou are doing Bulbu's nightly reflection. Full activity history (at,category,minutes,amount,units,app,label):\n${csv}` },
         { role: "user", content: `Known memory:\n${store.facts(userId).map(f => `- [${f.kind}, ${f.source}, ${f.confidence.toFixed(2)}] ${f.text}`).join("\n")}
 Engine-detected patterns: ${found.map(p => p.text + " — " + p.detail).join("; ") || "none"}.
-Return JSON: {"facts":[{"text":"...","confidence":0-1}] (new things about the user you are fairly sure of and that are not already known; tendencies, not causes), "letter":"a 3-sentence warm note from the user's future self about this week"}` }] });
-      const j = JSON.parse(msg.content ?? "{}") as { facts?: { text: string; confidence: number }[]; letter?: string };
+Return JSON: {"facts":[{"text":"...","confidence":0-1}] (new things about the user you are fairly sure of and that are not already known; tendencies, not causes), "letter":"a 3-sentence warm note from the user's future self about this week"${raid ? `, "raid":"one line (max 16 words) Bulbu says to warn that a Dim raid is coming at ${raid.label}, heading for the ${raid.buildingName} (their ${raid.goalTitle} goal). Warm, a little playful, never guilt; it can mention that 25 minutes of focus holds it off. Never use the words track, log, monitor, habit or streak."` : ""}}` }] });
+      const j = JSON.parse(msg.content ?? "{}") as { facts?: { text: string; confidence: number }[]; letter?: string; raid?: string };
+      if (raid && j.raid && !/\b(track|log|monitor|habit|streak)\w*/i.test(j.raid)) raidLine = { id: raid.id, text: j.raid.trim() };
       for (const f of j.facts ?? []) store.putFact(userId, { id: uid("f_"), kind: "fact", text: f.text, confidence: Math.min(0.9, f.confidence), source: "inferred", createdAt: iso, updatedAt: iso });
       letter = j.letter ?? null; via = "wonder";
     } catch (e) { console.warn("[wonder] reflection failed:", (e as Error).message); }
   }
   const u = store.user(userId);
-  if (u) store.putUser({ ...u, reflectedAt: iso, ...(letter && { letter: { text: letter, at: iso } }) });
+  if (u) store.putUser({ ...u, reflectedAt: iso, ...(letter && { letter: { text: letter, at: iso } }), ...(raidLine && { raidLine }) });
   return { patterns: found, facts: store.facts(userId), letter, via };
 }
 
