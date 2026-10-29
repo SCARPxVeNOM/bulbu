@@ -38,6 +38,8 @@ const BLOOM_LAYER = 1;
 //   background(ctx, w, h, project)                               paints the backdrop (canvas pixels); project(x, y, z) -> [px, py]
 //   build({ THREE, scene, camera, renderer, BLOOM_LAYER }) -> update(dt, t)   adds scene props once; update runs every frame
 //   tap(raycaster)                                               a tap that missed Bulbu (the ray through the tapped point)
+// build() also gets bulbu: { node, walk(on) }: the carrier Bulbu rides on (move, turn, scale or hide it; reset for each
+// stage) and the walk cycle to play while it moves.
 //   light: { scale, tint, glow, env }                            relight Bulbu for the world (e.g. night: dimmer, moon-blue, warmer own glow)
 //   controls: { minDistance, maxDistance, min/maxPolarAngle, … }  OrbitControls limits while the stage is up (with orbit: true)
 // Props with userData.noMask stay out of Bulbu's silhouette mask (so the halo still glows over them); props with
@@ -80,7 +82,10 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   const key = new THREE.DirectionalLight(0xfffaf4, 1.5); key.position.set(-2.6, 3.8, 4.2); scene.add(key);
   const fill = new THREE.DirectionalLight(0xf6f2ff, 0.55); fill.position.set(3.4, 1.6, 3.6); scene.add(fill);
   const rim = new THREE.DirectionalLight(0xd2bcff, 0.9); rim.position.set(0, 2.5, -4); scene.add(rim);
-  const glowLight = new THREE.PointLight(0xffd26a, 1.6, 3.2, 1.6); glowLight.position.set(0, 1.25, 0.2); scene.add(glowLight);
+  // Bulbu, its own glow light and its contact shadow ride on one carrier, so a stage can walk Bulbu round (the kingdom does)
+  const carrier = new THREE.Group(); carrier.name = "BulbuCarrier"; scene.add(carrier);
+  let walkOn = false;
+  const glowLight = new THREE.PointLight(0xffd26a, 1.6, 3.2, 1.6); glowLight.position.set(0, 1.25, 0.2); carrier.add(glowLight);
 
   // soft contact shadow
   const sc = document.createElement("canvas"); sc.width = sc.height = 128;
@@ -89,7 +94,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   sg.fillStyle = grd; sg.fillRect(0, 0, 128, 128);
   const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.0),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc), transparent: true, depthWrite: false }));
-  shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.003; scene.add(shadow);
+  shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.003; carrier.add(shadow);
 
   // ------------------------------------------------------------ selective bloom (core, filament, sparkles)
   const bloomLayer = new THREE.Layers(); bloomLayer.set(BLOOM_LAYER);
@@ -152,9 +157,10 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     });
     stageObjs = []; stageUpdate = null; noMask = []; noBloom = [];
     stageCfg = st || null;
+    carrier.position.set(0, 0, 0); carrier.rotation.set(0, 0, 0); carrier.scale.setScalar(1); carrier.visible = true; walk(false);
     if (stageCfg && stageCfg.build) {
       const before = new Set(scene.children);
-      stageUpdate = stageCfg.build({ THREE, scene, camera, renderer, BLOOM_LAYER }) || null;
+      stageUpdate = stageCfg.build({ THREE, scene, camera, renderer, BLOOM_LAYER, bulbu: { node: carrier, walk } }) || null;
       stageObjs = scene.children.filter(c => !before.has(c));
     }
     scene.traverse(o => { if (o.userData.noMask) noMask.push(o); if (o.userData.noBloom) noBloom.push(o); });
@@ -841,7 +847,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     (mats["Bulb_Glass"] || []).forEach(o => hiddenForBloom.push(o));
     ["Eye_Purple", "Eye_Shine", "Eye_Heart", "Eye_Star", "Face_Line", "Mouth", "Tongue", "Cheek_Blush"].forEach(n =>
       (mats[n] || []).forEach(o => { o.renderOrder = n === "Cheek_Blush" ? 5 : 10; o.material.transparent = true; if (n !== "Cheek_Blush") faceMeshes.add(o); }));
-    scene.add(model);
+    carrier.add(model);
     model.updateMatrixWorld(true);
     FX.forEach(rigidify);
     sleepEyes = buildSleepEyes();
@@ -852,7 +858,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
       if (clip.name.startsWith("Wave")) { a.setLoop(THREE.LoopOnce); a.clampWhenFinished = false; }
       actions[clip.name] = a;
     });
-    mixer.addEventListener("finished", () => play(baseAnim));
+    mixer.addEventListener("finished", () => { if (walkOn) { walkOn = false; walk(true); } else play(baseAnim); });
 
     const keys = new Set(); morphMeshes.forEach(m => Object.keys(m.morphTargetDictionary).forEach(k => keys.add(k)));
     Object.assign(stats, { triangles: Math.round(tris), bones, shapeKeys: keys.size, animations: gltf.animations.length, emoteParts: PARTS.length });
@@ -900,9 +906,23 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   const clip = name => actions[name];
   function setSpeed(name, v) { if (actions[name]) actions[name].timeScale = v; }
   let playing = "Idle";
+  /** Walking (a stage moving Bulbu round): the walk cycle plays over whatever Bulbu was doing, which comes back after. */
+  function walk(on) {
+    on = !!on;
+    if (on === walkOn || !actions.Walk) { walkOn = on && !!actions.Walk; return; }
+    walkOn = on;
+    const w = actions.Walk;
+    if (on) { w.reset().setEffectiveWeight(1).fadeIn(0.25).play(); if (current && current !== w) current.fadeOut(0.25); current = w; playing = "Walk"; }
+    else { const back = clip(activity() || baseAnim) || actions.Idle; back.reset().setEffectiveWeight(1).fadeIn(0.3).play(); if (back !== w) w.fadeOut(0.3); current = back; playing = activity() || baseAnim; }
+  }
   function play(name, fade = 0.35, fromEmote = false) {
     // showing off an item holds its pose; the motion asked for now plays when it's put away
     if (showT >= 0) { if (name !== "Wave" && name !== HOLD.clip) baseAnim = name; return; }
+    // walking: keep walking; the motion asked for plays when Bulbu stops (the sleepy face still follows)
+    if (walkOn && name !== "Wave") {
+      if (!fromEmote) { const s = name === "Sleepy"; if (s !== sleeping) { sleeping = s; applyFace(); } }
+      baseAnim = name; return;
+    }
     const act = activity();
     if (act && name !== act) {            // holding a prop: keep doing the activity (only the sleepy face follows)
       if (!fromEmote) { const s = name === "Sleepy"; if (s !== sleeping) { sleeping = s; applyFace(); } }
@@ -997,7 +1017,8 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     mixPass.uniforms.filPower.value = 0.9 * glow * flicker * (1 - 0.45 * sleepAmt);
     mixPass.uniforms.tint.value.lerp(target.halo, k);
     mixPass.uniforms.power.value += (target.haloPow * 0.95 * glow * flicker * (1 - 0.4 * sleepAmt) - mixPass.uniforms.power.value) * k;
-    glowLight.color.copy(U.center.value); glowLight.intensity = 1.6 * target.haloPow * glow * stageGlow;
+    glowLight.color.copy(U.center.value); glowLight.intensity = 1.6 * target.haloPow * glow * stageGlow * carrier.scale.x;
+    glowLight.distance = 3.2 * carrier.scale.x;          // a smaller Bulbu lights a smaller patch round it
 
     // squash-and-stretch pop when the emote changes or Bulbu is poked
     popT += dt;

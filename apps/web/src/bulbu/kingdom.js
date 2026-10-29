@@ -313,12 +313,16 @@ export function createKingdom({ url }) {
   return k;
 }
 
-function build({ THREE, scene, renderer, BLOOM_LAYER }, url, getState) {
+function build({ THREE, scene, renderer, BLOOM_LAYER, bulbu }, url, getState) {
   // Bulbu stands at the origin; the island sits a little behind it, so Bulbu reads big in front of its kingdom
   const root = new THREE.Group(); root.name = "KingdomStage"; root.position.z = -1.0; scene.add(root);
   const mark = o => { o.traverse(m => { m.userData.noMask = true; }); return o; };
   const B = {};           // id -> { node, levels[], scaffold, plot, mats[], tops[], fog, level, shown }
   let treasure = null, treasureKey = "", coins = null, loaded = false, treasureAt = null, shadowFrames = 0;
+  let roads = [], walker = null;
+  // Bulbu walks the island at a villager's size (it stands at its spot in front until the island has loaded)
+  const BULBU_SIZE = 0.55;
+  if (bulbu) { bulbu.node.scale.setScalar(BULBU_SIZE); }
   const floaters = [];
 
   // sunlight from the upper left (a little behind, so shadows fall towards you and to the right), with soft shadows. The island doesn't move, so the shadow map is drawn only when
@@ -423,6 +427,7 @@ function build({ THREE, scene, renderer, BLOOM_LAYER }, url, getState) {
     const paths = (byName("Paths")?.children ?? []).map(p => p.children.map(c => [c.position.x, c.position.z]));
     byName("Paths")?.removeFromParent();
     if (paths.length) root.add(mark(pathMesh(THREE, paths)));
+    roads = paths;
     const pn = byName("Pond"), pondAt = pn ? [pn.position.x, pn.position.z, pn.userData.r ?? 0.95] : null;
     if (pondAt) { const p = pond(THREE, ...pondAt); root.add(mark(p)); floaters.push(p); pn.removeFromParent(); }
     const homes = KINGDOM_IDS.map(id => byName(id)).filter(Boolean).map(n => [n.position.x, n.position.z]);
@@ -471,6 +476,7 @@ function build({ THREE, scene, renderer, BLOOM_LAYER }, url, getState) {
     treasureAt = byName("Castle_Treasure");
     if (treasureAt) { mark(orbGroup); treasureAt.add(orbGroup); }
     loaded = true; apply(); reshadow(3);
+    walker = bulbu ? makeWalker() : null;
     if (queued) { const m = queued; queued = null; moment(m); }
   }, undefined, err => console.warn("kingdom", err));
 
@@ -510,6 +516,7 @@ function build({ THREE, scene, renderer, BLOOM_LAYER }, url, getState) {
   root.add(mark(selRing));
   let sel = null;
   function select(id) {
+    walker?.goTo(id && B[id] ? id : null);
     const b = id && B[id];
     if (sel && sel !== b) { sel.node.scale.copy(sel.baseScale); sel.bounce = null; }
     sel = b || null;
@@ -532,6 +539,131 @@ function build({ THREE, scene, renderer, BLOOM_LAYER }, url, getState) {
     let best = null, bd = Infinity;
     for (const b of live) { const d = Math.hypot(hitP.x - b.node.position.x, hitP.z - b.node.position.z) / b.node.scale.x; if (d < bd) { bd = d; best = b; } }
     return best && bd < (best.id === "Castle" ? 1.9 : 1.3) ? best.id : null;
+  }
+
+  // ---- Bulbu walking the island: along the dirt paths from one spot to the next, stopping now and then. Pick a
+  // building and Bulbu heads there and goes in at the door (the building lights up while it's inside); pick
+  // something else, or nothing, and it comes back out.
+  function makeWalker() {
+    const node = bulbu.node, SPEED = 1.35, r = rng(77);
+    // the path network: points every ~0.35 along each path, joined where paths meet
+    const pts = [], links = [];
+    const add = (x, z) => { pts.push([x, z]); links.push([]); return pts.length - 1; };
+    const join = (a, b) => { if (a !== b && !links[a].includes(b)) { links[a].push(b); links[b].push(a); } };
+    const near = (x, z, skip) => { let best = -1, bd = Infinity; pts.forEach(([px, pz], i) => { if (skip && skip(i)) return; const d = Math.hypot(px - x, pz - z); if (d < bd) { bd = d; best = i; } }); return [best, bd]; };
+    const runs = roads.map(pp => {
+      const curve = new THREE.CatmullRomCurve3(pp.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, "centripetal");
+      const n = Math.max(2, Math.round(curve.getLength() / 0.35)), ids = [];
+      curve.getSpacedPoints(n).forEach((p, i) => { const k = add(p.x, p.z); if (i) join(ids[ids.length - 1], k); ids.push(k); });
+      return ids;
+    });
+    runs.forEach(ids => {
+      for (const end of [ids[0], ids[ids.length - 1]]) {
+        const mine = new Set(ids), [k, d] = near(...pts[end], i => mine.has(i));
+        if (k >= 0 && d < 0.75) join(end, k);
+      }
+    });
+    const home = add(0, 1.0); join(home, near(0, 1.0, i => i === home)[0]);
+    const route = (from, to) => {                                        // shortest way along the paths
+      const dist = new Map([[from, 0]]), prev = new Map(), open = [from];
+      while (open.length) {
+        open.sort((a, b) => dist.get(a) - dist.get(b));
+        const c = open.shift(); if (c === to) break;
+        for (const n of links[c]) {
+          const d = dist.get(c) + Math.hypot(pts[n][0] - pts[c][0], pts[n][1] - pts[c][1]);
+          if (d < (dist.get(n) ?? Infinity)) { dist.set(n, d); prev.set(n, c); open.push(n); }
+        }
+      }
+      if (!dist.has(to)) return [to];
+      const out = [to]; for (let c = to; prev.has(c); c = prev.get(c)) out.unshift(prev.get(c));
+      return out;
+    };
+    // a building's door: in front of it, at the foot of the model
+    const doorOf = b => {
+      const a = b.node.rotation.y, s = b.node.scale.x * (b.id === "Castle" ? 1.15 : 0.75);
+      return [b.node.position.x + Math.sin(a) * s, b.node.position.z + Math.cos(a) * s];
+    };
+    const w = { x: 0, z: 1.0, heading: 0, way: [], state: "rest", wait: 3 + r() * 2, goal: null, inside: null, t: 0 };
+    const place = () => {
+      v.set(w.x, 0, w.z); root.localToWorld(v);
+      node.position.set(v.x, v.y, v.z);
+      node.rotation.y = w.heading;
+    };
+    const setWay = (x, z, extra = []) => {
+      const [from] = near(w.x, w.z), [to] = near(x, z);
+      w.way = [...route(from, to).map(i => pts[i]), ...extra];
+      // skip the first point if we're already past it
+      if (w.way.length > 1 && Math.hypot(w.way[0][0] - w.x, w.way[0][1] - w.z) < 0.4) w.way.shift();
+      w.state = "walk"; bulbu.walk(true);
+    };
+    const leave = () => {                                                  // come back out of the door
+      const b = B[w.inside]; if (!b) { w.inside = null; return; }
+      b.home = false; w.inside = null; w.state = "out"; w.t = 0; node.visible = true;
+      const [dx, dz] = doorOf(b); w.x = dx; w.z = dz; w.heading = b.node.rotation.y;
+    };
+    const head = () => {                                                    // go to the goal, or wander
+      const b = w.goal && B[w.goal];
+      if (b) {
+        const [dx, dz] = doorOf(b), a = b.node.rotation.y, s = b.node.scale.x;
+        setWay(dx + Math.sin(a) * 0.45 * s, dz + Math.cos(a) * 0.45 * s, [[dx, dz]]);
+        w.state = "walk"; w.toDoor = b.id;
+      } else {
+        w.toDoor = null;
+        let k = Math.floor(r() * pts.length);
+        for (let i = 0; i < 6 && Math.hypot(pts[k][0] - w.x, pts[k][1] - w.z) < 2.5; i++) k = Math.floor(r() * pts.length);
+        setWay(...pts[k]);
+      }
+    };
+    place();
+    return {
+      goTo(id) {
+        if (id === w.goal && (w.inside === id || w.toDoor === id)) return;
+        w.goal = id;
+        if (w.inside && w.inside !== id) leave();
+        else if (w.state !== "out" && w.state !== "in") head();
+      },
+      update(dt) {
+        if (w.state === "rest") {
+          bulbu.walk(false);
+          if ((w.wait -= dt) <= 0) head();
+        } else if (w.state === "walk") {
+          let step = SPEED * dt;
+          while (step > 0 && w.way.length) {
+            const [tx, tz] = w.way[0], dx = tx - w.x, dz = tz - w.z, d = Math.hypot(dx, dz);
+            if (d > 0.02) {
+              const want = Math.atan2(dx, dz); let da = want - w.heading;
+              da = Math.atan2(Math.sin(da), Math.cos(da)); w.heading += da * Math.min(1, dt * 9);
+            }
+            if (d <= step) { w.x = tx; w.z = tz; step -= d; w.way.shift(); }
+            else { w.x += (dx / d) * step; w.z += (dz / d) * step; step = 0; }
+          }
+          if (!w.way.length) {
+            const b = w.toDoor && B[w.toDoor];
+            if (b && b.shown) { w.state = "in"; w.t = 0; }        // a building: go in
+            else if (b) {                                                              // a plot: stop and look at it
+              w.state = "wait"; bulbu.walk(false);
+              w.heading = Math.atan2(b.node.position.x - w.x, b.node.position.z - w.z);
+            } else { w.state = "rest"; w.wait = 2 + r() * 5; }
+          }
+        } else if (w.state === "in") {                                      // through the door, shrinking away
+          const b = B[w.toDoor]; w.t += dt / 0.55;
+          const p = Math.min(1, w.t), [dx, dz] = doorOf(b);
+          w.heading = b.node.rotation.y + Math.PI;
+          w.x = dx - Math.sin(b.node.rotation.y) * 0.35 * p; w.z = dz - Math.cos(b.node.rotation.y) * 0.35 * p;
+          node.scale.setScalar(BULBU_SIZE * Math.max(0.001, 1 - p * p));
+          if (p >= 1) {
+            node.visible = false; bulbu.walk(false); w.state = "inside"; w.inside = b.id; b.home = true; b.visit = 1.4;
+            if (sel === b) b.bounce = 0;                                     // the building gives a happy little bounce
+            if (w.goal !== b.id) leave();                                  // picked something else on the way in
+          }
+        } else if (w.state === "out") {                                     // out of the door, popping back up
+          w.t += dt / 0.45; const p = Math.min(1, w.t);
+          node.scale.setScalar(BULBU_SIZE * (p < 1 ? 1 - Math.pow(1 - p, 3) + Math.sin(p * Math.PI) * 0.15 : 1));
+          if (p >= 1) { node.scale.setScalar(BULBU_SIZE); if (w.goal) head(); else { w.state = "rest"; w.wait = 0.6 + r(); } }
+        } else if (w.state === "wait" && !w.goal) { w.state = "rest"; w.wait = 0.5; }
+        if (node.visible) place();
+      },
+    };
   }
 
   // the top of a building as it stands now (its level, or its plot)
@@ -610,7 +742,8 @@ function build({ THREE, scene, renderer, BLOOM_LAYER }, url, getState) {
       b.glowNow = (b.glowNow ?? 0) + (tg.glow - (b.glowNow ?? 0)) * (ev ? k * 0.4 : k);
       const f = ev && ev.kind === "light" ? Math.max(b.fog.now, ev.from * (1 - Math.min(1, ev.t / EV))) : b.fog.now, gl = b.glowNow + flare;
       // dim the building under the fog, warm it when it glows
-      for (const m of b.mats) { m.color.copy(m.userData.base).lerp(tint, f * 0.6); m.emissive.copy(warm); m.emissiveIntensity = gl * 0.2 * (1 - f); }
+      b.visit = Math.max(b.home ? 0.35 : 0, (b.visit ?? 0) - dt * 0.6);       // lit up while Bulbu's inside
+      for (const m of b.mats) { m.color.copy(m.userData.base).lerp(tint, f * 0.6); m.emissive.copy(warm); m.emissiveIntensity = (gl * 0.2 + b.visit * 0.22) * (1 - f); }
       // even a little of the Dim shows (a short scroll should be seen), and it thickens from there
       b.fog.mat.opacity = (f > 0.01 ? Math.min(0.8, 0.28 + f * 0.75) : 0) * (spread > 1 && ev?.kind === "light" ? Math.max(0, 1 - (spread - 1) / 1.3) : 1);
       b.fog.group.visible = f > 0.01;
@@ -647,6 +780,7 @@ function build({ THREE, scene, renderer, BLOOM_LAYER }, url, getState) {
       }
       if (held && stormGone >= 1) { stormFor = null; storm.visible = false; }
     } else storm.visible = false;
+    walker?.update(dt);
     if (sel) {
       ringMat.opacity = 0.75 + 0.25 * Math.sin(t * 4);
       if (sel.bounce != null) {
