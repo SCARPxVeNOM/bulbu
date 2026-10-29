@@ -36,7 +36,7 @@ export function GymProof() {
         {!gym ? <>
           <Text style={T.small}>Stand in your gym and set it once. Bulbu keeps only that spot, never where you go, and checks your location only when you tap.</Text>
           <Input value={name} onChangeText={setName} placeholder="Gym name (optional)" maxLength={40} />
-          <Btn icon="target" title="📍 This is my gym" busy={busy === "set"} onPress={() => run("set", async () => {
+          <Btn title="📍 This is my gym" busy={busy === "set"} onPress={() => run("set", async () => {
             const r = await api.setGym({ ...(await hereNow()), name }); setName(""); refresh(); toast(`${r.gym.name} is set. Check in when you're there.`);
           })} />
         </> : visit ? <>
