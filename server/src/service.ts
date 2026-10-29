@@ -199,7 +199,7 @@ const DEAL_CARDS = { type: "function" as const, function: {
   parameters: { type: "object", required: ["cards"], properties: {
     cards: { type: "array", minItems: 1, maxItems: 3, items: { type: "object", required: ["id", "line"], properties: {
       id: { type: "string" },
-      line: { type: "string", description: "Max ~12 words, warm and specific to this person (their patterns, their goal). Never guilt." },
+      line: { type: "string", description: "Max 10 words, plain and friendly, like a friend's text: when or why this one suits them (from what Bulbu knows). No metaphors, no numbers, never guilt. E.g. 'Your evenings are your best coding time'." },
     } } },
   } } } };
 const BANNED = /\b(track|tracker|tracking|log|logged|logging|monitor|habit|streak|insights?|dashboard)\b/i;
