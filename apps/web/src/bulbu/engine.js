@@ -40,7 +40,8 @@ const BLOOM_LAYER = 1;
 //   tap(raycaster)                                               a tap that missed Bulbu (the ray through the tapped point)
 // build() also gets bulbu: { node, walk(on) }: the carrier Bulbu rides on (move, turn, scale or hide it; reset for each
 // stage) and the walk cycle to play while it moves.
-//   light: { scale, tint, glow, env }                            relight Bulbu for the world (e.g. night: dimmer, moon-blue, warmer own glow)
+//   light: { scale, tint, glow, env, grade }                     relight Bulbu for the world (e.g. night: dimmer, moon-blue, warmer own glow);
+//                                                                grade: { vibrance, contrast } colours the stage (never Bulbu)
 //   controls: { minDistance, maxDistance, min/maxPolarAngle, … }  OrbitControls limits while the stage is up (with orbit: true)
 // Props with userData.noMask stay out of Bulbu's silhouette mask (so the halo still glows over them); props with
 // userData.noBloom are skipped by the glow passes (only drawn in the final image).
@@ -106,14 +107,23 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
   bloomComposer.addPass(renderScene); bloomComposer.addPass(bloomPass);
   const mixPass = new ShaderPass(new THREE.ShaderMaterial({
     uniforms: { baseTexture: { value: null }, bloomTexture: { value: bloomComposer.renderTarget2.texture }, maskTexture: { value: null },
+                vibrance: { value: 0 }, contrast: { value: 1 },
                 tint: { value: new THREE.Color(1, 0.86, 0.55) }, power: { value: 1 }, inside: { value: 0.06 },
                 maskTexel: { value: new THREE.Vector2(1 / 256, 1 / 256) }, maskBlur: { value: 0.0 } },
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
     fragmentShader: `uniform sampler2D baseTexture; uniform sampler2D bloomTexture; uniform sampler2D maskTexture; uniform sampler2D filTexture;
       uniform vec3 tint; uniform float power; uniform float inside; uniform vec3 filTint; uniform float filPower; varying vec2 vUv;
-      uniform vec2 maskTexel; uniform float maskBlur;
+      uniform vec2 maskTexel; uniform float maskBlur; uniform float vibrance; uniform float contrast;
       void main(){ vec4 b = texture2D(baseTexture, vUv); vec3 g = texture2D(bloomTexture, vUv).rgb;
         float m = texture2D(maskTexture, vUv).r;   // Bulbu's silhouette (antialiased, same pixels as the picture)
+        // the stage's colour grade (vibrance lifts dull colours most; contrast round mid grey), never on Bulbu itself
+        if (vibrance != 0.0 || contrast != 1.0) {
+          vec3 c = max(b.rgb, vec3(0.0)); float L = dot(c, vec3(0.2126, 0.7152, 0.0722));
+          float mx = max(c.r, max(c.g, c.b)), sat = mx > 0.0 ? (mx - min(c.r, min(c.g, c.b))) / mx : 0.0;
+          vec3 v = max(mix(vec3(L), c, 1.0 + vibrance * (1.0 - sat)), vec3(0.0));
+          v = 0.18 * pow(v / 0.18, vec3(contrast));
+          b.rgb = mix(v, b.rgb, m);
+        }
         vec3 halo = mix(g, tint * max(max(g.r, g.g), g.b), 0.55) * power * mix(1.0, inside, m);
         vec3 fg = texture2D(filTexture, vUv).rgb;
         float face = texture2D(maskTexture, vUv).g;
@@ -172,6 +182,8 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     hemi.groundColor.copy(baseGround); if (L && L.tint) hemi.groundColor.multiply(new THREE.Color(L.tint));
     scene.environmentIntensity = baseEnv * (L ? L.env ?? 1 : 1);
     stageGlow = L ? L.glow ?? 1 : 1;
+    mixPass.uniforms.vibrance.value = L && L.grade ? L.grade.vibrance ?? 0 : 0;
+    mixPass.uniforms.contrast.value = L && L.grade ? L.grade.contrast ?? 1 : 1;
     if (resize) resize();
   }
 

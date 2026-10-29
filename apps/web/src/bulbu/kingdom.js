@@ -59,20 +59,27 @@ const patch = (x, z) => 0.5 + 0.22 * Math.sin(x * 0.62 + z * 0.31) + 0.16 * Math
 
 /** The lawn: every cell as one seamless surface (no seams between tiles), finely split so its colour can vary, and a
  *  grass lip over a band of earth round the outer edge. */
-function lawn(THREE, tiles) {
+function lawn(THREE, tiles, occluders = []) {
   const verts = new Map(), pos = [], col = [], idx = [];
-  const dark = new THREE.Color("#5FB43C"), mid = new THREE.Color("#7FCB47"), light = new THREE.Color("#A2DE5E"), c = new THREE.Color();
+  const dark = new THREE.Color("#4EA92C"), mid = new THREE.Color("#72C83A"), light = new THREE.Color("#9EE152"), c = new THREE.Color();
+  const shade = new THREE.Color("#2F7A2A");
+  // soft contact shading round the foot of everything standing on the lawn (buildings, trees, rocks)
+  const occlusion = (x, z) => { let o = 0; for (const [ox, oz, r] of occluders) { const d = Math.hypot(x - ox, z - oz) / r; if (d < 1) o = Math.max(o, (1 - d) * (1 - d)); } return o; };
   const vert = (x, y, z, color) => {
     const k = `${x.toFixed(3)},${y.toFixed(3)},${z.toFixed(3)}`;
     if (color === undefined && verts.has(k)) return verts.get(k);
     const n = pos.length / 3; pos.push(x, y, z);
     if (color) col.push(color.r, color.g, color.b);
-    else { const p = Math.max(0, Math.min(1, patch(x, z))); c.copy(dark).lerp(mid, Math.min(1, p * 1.6)).lerp(light, Math.max(0, p - 0.62) * 2.2); col.push(c.r, c.g, c.b); }
+    else {
+      const p = Math.max(0, Math.min(1, patch(x, z)));
+      c.copy(dark).lerp(mid, Math.min(1, p * 1.6)).lerp(light, Math.max(0, p - 0.62) * 2.2).lerp(shade, occlusion(x, z) * 0.55);
+      col.push(c.r, c.g, c.b);
+    }
     if (color === undefined) verts.set(k, n);
     return n;
   };
-  const N = 3, has = new Set(tiles.map(([x, z]) => `${Math.round(x)},${Math.round(z * 10)}`));
-  const lip = new THREE.Color("#4E9A34"), soil = new THREE.Color("#8A6244"), soilDeep = new THREE.Color("#6E4B39");
+  const N = 4, has = new Set(tiles.map(([x, z]) => `${Math.round(x)},${Math.round(z * 10)}`));
+  const lip = new THREE.Color("#3F9A28"), soil = new THREE.Color("#93633F"), soilDeep = new THREE.Color("#6A4430");
   for (const [x, z] of tiles) {
     for (let i = 0; i < 6; i++) {
       const [ax, az] = hexCorner(x, z, 1, i), [bx, bz] = hexCorner(x, z, 1, i + 1);
@@ -110,7 +117,7 @@ function lawn(THREE, tiles) {
 // underside reads as stacked basalt, earthy under the grass and lavender stone further down.
 function underside(THREE, tiles) {
   const r = rng(42), pos = [], col = [];
-  const earth = new THREE.Color("#6E4B39"), stone = new THREE.Color("#B6A6D8"), deep = new THREE.Color("#7466AE");
+  const earth = new THREE.Color("#6A4430"), stone = new THREE.Color("#B3A0E6"), deep = new THREE.Color("#6A55B8");
   const cx = 0, cz = -5.6;
   const quad = (a, b, c, d, ca, cb) => { pos.push(...a, ...b, ...c, ...a, ...c, ...d); col.push(...ca, ...cb, ...cb, ...ca, ...cb, ...ca); };
   for (const [tx, tz] of tiles) {
@@ -147,17 +154,19 @@ function underside(THREE, tiles) {
 
 // ------------------------------------------------------------------ dirt paths
 function pathTexture(THREE) {
-  const c = document.createElement("canvas"); c.width = 64; c.height = 256;
+  // packed sand: a crisp edge with a slightly darker rim, a lighter worn middle, and a scatter of pebbles
+  const c = document.createElement("canvas"); c.width = 128; c.height = 512;
   const g = c.getContext("2d"), r = rng(3);
-  const grd = g.createLinearGradient(0, 0, 64, 0);
-  grd.addColorStop(0, "rgba(226,196,140,0)"); grd.addColorStop(0.16, "rgba(222,190,132,0.9)"); grd.addColorStop(0.5, "rgba(240,214,160,1)");
-  grd.addColorStop(0.84, "rgba(222,190,132,0.9)"); grd.addColorStop(1, "rgba(226,196,140,0)");
-  g.fillStyle = grd; g.fillRect(0, 0, 64, 256);
-  for (let i = 0; i < 22; i++) {                                         // a few pebbles
-    g.fillStyle = `rgba(${190 + r() * 30},${160 + r() * 25},${115 + r() * 25},${0.55 + r() * 0.3})`;
-    g.beginPath(); g.ellipse(16 + r() * 32, r() * 256, 1.2 + r() * 1.8, 0.9 + r() * 1.3, r() * 3, 0, Math.PI * 2); g.fill();
+  const grd = g.createLinearGradient(0, 0, 128, 0);
+  grd.addColorStop(0, "rgba(196,150,92,0)"); grd.addColorStop(0.07, "rgba(196,150,92,1)"); grd.addColorStop(0.13, "rgba(226,186,124,1)");
+  grd.addColorStop(0.5, "rgba(246,220,166,1)"); grd.addColorStop(0.87, "rgba(226,186,124,1)"); grd.addColorStop(0.93, "rgba(196,150,92,1)"); grd.addColorStop(1, "rgba(196,150,92,0)");
+  g.fillStyle = grd; g.fillRect(0, 0, 128, 512);
+  for (let i = 0; i < 46; i++) {
+    const x = 22 + r() * 84, y = r() * 512, rx = 2 + r() * 3.2, ry = 1.5 + r() * 2.2, a = r() * 3;
+    g.fillStyle = "rgba(160,118,70,.35)"; g.beginPath(); g.ellipse(x + 0.8, y + 1, rx, ry, a, 0, Math.PI * 2); g.fill();     // its shadow
+    g.fillStyle = `rgb(${206 + r() * 30},${178 + r() * 26},${132 + r() * 26})`; g.beginPath(); g.ellipse(x, y, rx, ry, a, 0, Math.PI * 2); g.fill();
   }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
   return t;
 }
 function pathMesh(THREE, paths) {
@@ -165,7 +174,7 @@ function pathMesh(THREE, paths) {
   const geos = [];
   for (const pts of paths) {
     const curve = new THREE.CatmullRomCurve3(pts.map(([x, z]) => new THREE.Vector3(x, 0.012, z)), false, "centripetal");
-    const N = Math.max(8, Math.round(curve.getLength() * 6)), W = 0.36, pos = [], uv = [], idx = [];
+    const N = Math.max(8, Math.round(curve.getLength() * 8)), W = 0.38, pos = [], uv = [], idx = [];
     let len = 0, prev = null;
     for (let i = 0; i <= N; i++) {
       const t = i / N, p = curve.getPoint(t), tg = curve.getTangent(t), nx = -tg.z, nz = tg.x, nl = Math.hypot(nx, nz) || 1;
@@ -302,7 +311,7 @@ export function createKingdom({ url }) {
     orbit: true,
     controls: { minDistance: 12, maxDistance: 34, minPolarAngle: 36 * DEG, maxPolarAngle: 70 * DEG, minAzimuthAngle: -55 * DEG, maxAzimuthAngle: 55 * DEG, enablePan: false },
     view, background: paintKingdomSky,
-    light: { scale: 0.7, env: 1.0 },
+    light: { scale: 0.7, env: 1.0, grade: { vibrance: 0.38, contrast: 1.1 } },
     build(ctx) { ctl = build(ctx, url, () => want); if (pending) { ctl.moment(pending); pending = null; } if (selected) ctl.select(selected); return ctl.update; },
     // a tap on the island: the building under it (or nearest the tapped ground), else nothing
     tap(ray) {
@@ -328,13 +337,13 @@ function build({ THREE, scene, renderer, BLOOM_LAYER, bulbu }, url, getState) {
   // sunlight from the upper left (a little behind, so shadows fall towards you and to the right), with soft shadows. The island doesn't move, so the shadow map is drawn only when
   // something changes (a level going up, a plot turning into a building), not every frame.
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.shadowMap.autoUpdate = false;
-  const sun = new THREE.DirectionalLight("#FFF1DA", 1.9);
+  const sun = new THREE.DirectionalLight("#FFEBC8", 2.0);
   sun.position.set(-13, 15, -8); sun.target.position.set(0, 0, -5.5);
   sun.castShadow = true;
   Object.assign(sun.shadow.camera, { left: -15, right: 15, top: 13, bottom: -13, near: 2, far: 40 });
   sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.025; sun.shadow.radius = 3;
   root.add(sun, sun.target);
-  const sky = new THREE.HemisphereLight("#CFE0FF", "#7DBE5A", 0.35); root.add(sky);   // a touch of green bounce off the grass
+  const sky = new THREE.HemisphereLight("#B9D4FF", "#6FB848", 0.42); root.add(sky);   // cool skylight in the shadows, green bounce off the grass
   const reshadow = (n = 2) => { shadowFrames = Math.max(shadowFrames, n); };
 
   // the treasure: a glowing gold orb until there's a photo of the real thing
@@ -410,10 +419,19 @@ function build({ THREE, scene, renderer, BLOOM_LAYER, bulbu }, url, getState) {
       });
       o.parent.remove(o);
     };
+    const occluders = [];
+    for (const c of byName("Decor")?.children ?? []) {
+      box.setFromObject(c); const sz = box.getSize(v);
+      if (sz.y > 0.12) occluders.push([c.position.x, c.position.z, Math.max(0.35, Math.max(sz.x, sz.z) * 0.62)]);
+    }
+    for (const id of KINGDOM_IDS) { const n = byName(id); if (n) occluders.push([n.position.x, n.position.z, 1.45 * n.scale.x]); }
     for (const n of ["Ground", "Decor"]) {
       const g = byName(n); if (!g) continue;
       for (const c of [...g.children]) bake(c, c.name.startsWith("Sway_"));
     }
+    // the palette is flat swatches of colour: sample it without mipmaps so far-off pieces keep their exact colours
+    // (mipmaps would blend neighbouring swatches into mud)
+    if (sharedMat.map) { const t = sharedMat.map; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.anisotropy = 1; t.needsUpdate = true; }
     const groundMat = sharedMat.clone(); groundMat.roughness = 0.85;
     const treeMat = windy(sharedMat.clone(), 0.045); treeMat.roughness = 0.8;
     for (const [geos, mat, name] of [[still, groundMat, "Scenery"], [swaying, treeMat, "Trees"]]) {
@@ -421,7 +439,7 @@ function build({ THREE, scene, renderer, BLOOM_LAYER, bulbu }, url, getState) {
       const m = new THREE.Mesh(mergeGeometries(geos), mat); m.name = name;
       m.castShadow = true; m.receiveShadow = true; root.add(mark(m));
     }
-    root.add(mark(lawn(THREE, tiles)), mark(underside(THREE, tiles)));
+    root.add(mark(lawn(THREE, tiles, occluders)), mark(underside(THREE, tiles)));
 
     // ---- paths, then grass and flowers everywhere that's open
     const paths = (byName("Paths")?.children ?? []).map(p => p.children.map(c => [c.position.x, c.position.z]));
