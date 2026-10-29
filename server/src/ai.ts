@@ -120,7 +120,7 @@ Phrases you like: "Small moves add up." "The Dim clears quickly." "It's okay, we
 Never invent numbers. Goal dates and "days closer/later" come only from the engine (tool results or numbers given to you). If you don't have a number, don't make one up.
 Usage data is per app: say "2h on Instagram", not "2h of Reels", unless the user said Reels.
 Nutrition and sleep feedback are trends, never medical advice. Patterns are tendencies, not proven causes.
-Keep replies short: 1-3 sentences in chat unless the user asks for more.`;
+Keep replies short: 1-3 sentences in chat unless the user asks for more. Plain text only: no markdown (no **bold**, no # headings); for a list, put each item on its own line.`;
 
 /** Keep model-written text in the kingdom's language: the few words Bulbu never says, swapped for ones it does.
  *  (The persona already asks for this; this catches a slip.) */
@@ -132,7 +132,8 @@ export function tidy(text: string): string {
     [/\bhabits\b/gi, "routines"], [/\bhabit\b/gi, "routine"], [/\bstreaks\b/gi, "runs"], [/\bstreak\b/gi, "run"],
     [/\binsights\b/gi, "ideas"], [/\binsight\b/gi, "idea"], [/\bdashboards?\b/gi, "kingdom"],
   ];
-  return rules.reduce((t, [re, w]) => t.replace(re, m => keep(m, w)), text);
+  const plain = text.replace(/\*\*(.+?)\*\*/g, "$1").replace(/__(.+?)__/g, "$1").replace(/^#{1,6}\s+/gm, "").replace(/^\s*[-*]\s+/gm, "• ");   // the app shows plain text
+  return rules.reduce((t, [re, w]) => t.replace(re, m => keep(m, w)), plain);
 }
 
 const EMOTES = ["happy", "focused", "drained", "stressed", "thriving", "celebrating"];
