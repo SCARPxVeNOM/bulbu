@@ -11,26 +11,29 @@
 //   k.moment({ id: "Library", kind: "dim", fogFrom: 0, fogTo: 0.7, glowFrom, glowTo })   // play an event on a building:
 //                 "dim" rolls the fog in from round it and dims it; "light" blows the fog away and flares it up
 //
-// The scene comes from public/kingdom.glb (scripts/build-kingdom.mjs), driven through its named nodes: floors
-// <Id>_F1.._F5 up to the level, <Id>_Roof on top, <Id>_Scaffold round the floor being built, <Id>_Plot for a goal-less
-// building, Castle_Treasure, Observatory_Dome and Vault_Coins. The island, the Dim (fog), the treasure orb, the dome and
-// the coins are made here.
+// The scene comes from public/kingdom.glb (scripts/build-kingdom.mjs: KayKit's hex tiles, buildings and nature),
+// driven through its named nodes: <Id>_L1.._L5 (the building at each level, one shown at a time), <Id>_Scaffold while
+// the next level is being built, <Id>_Plot for a goal-less building, Castle_Treasure and Vault_Coins. Here we add the
+// rock under the island (from the tiles), the dirt paths, grass and flowers that sway in the wind, sunlight with soft
+// shadows, the Dim (fog), the raid storm, the treasure orb and the coins. The ground and the scenery are merged into
+// a couple of meshes so the island draws in a handful of calls on a phone.
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { cloud, glowDot } from "./sky.js";
 
 export const KINGDOM_IDS = ["Castle", "Library", "Vault", "Arena", "Observatory", "Workshop"];
-const DEG = Math.PI / 180, FLOORS = 5;
+const DEG = Math.PI / 180, LEVELS = 5;
 
 // ------------------------------------------------------------------ the sky behind the island
 function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 export function paintKingdomSky(ctx, W, H) {
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, "#9FB6FF"); g.addColorStop(0.45, "#C9C2FF"); g.addColorStop(0.78, "#F6D3EE"); g.addColorStop(1, "#FFE6D6");
+  g.addColorStop(0, "#8FB4FF"); g.addColorStop(0.42, "#BFD0FF"); g.addColorStop(0.75, "#F3D6F0"); g.addColorStop(1, "#FFE7D6");
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   const u = Math.min(W, H * 0.62);
-  glowDot(ctx, W * 0.78, H * 0.12, u * 0.55, "255,244,214", 0.55);           // a soft sun up and to the right
+  glowDot(ctx, W * 0.8, H * 0.1, u * 0.6, "255,246,220", 0.6);             // a soft sun up and to the right
   const r = rng(7);
-  for (let i = 0; i < 70; i++) glowDot(ctx, r() * W, r() * H * 0.45, u * (0.004 + r() * 0.006), "255,255,255", 0.5 + r() * 0.4);
+  for (let i = 0; i < 50; i++) glowDot(ctx, r() * W, r() * H * 0.4, u * (0.004 + r() * 0.006), "255,255,255", 0.4 + r() * 0.4);
   // clouds on both sides, and a bank of them low down, under the island
   cloud(ctx, W * 0.08, H * 0.2, u * 0.5, 3, 0.9); cloud(ctx, W * 0.96, H * 0.3, u * 0.42, 5, 0.85);
   for (let i = 0; i < 6; i++) cloud(ctx, W * (i / 5) + (r() - 0.5) * u * 0.2, H * (0.9 + r() * 0.06), u * (0.55 + r() * 0.25), 11 + i, 1);
@@ -41,61 +44,242 @@ function view(aspect) {
   // a three-quarter view from above, Bulbu in the lower middle, the castle behind; on a phone the island runs off
   // the sides a little (drag to look round), on wider screens it all fits
   const fov = 40, tanV = Math.tan((fov / 2) * DEG);
-  const halfW = 5.1 + Math.min(1, Math.max(0, (aspect - 0.5) / 0.6)) * 3.8;   // how much of the island's width to show
-  const dist = Math.max(14, halfW / (tanV * aspect), 6.4 / tanV);
-  const el = 37 * DEG, tgt = [0, 1.7, -4.6];
+  const halfW = 5.4 + Math.min(1, Math.max(0, (aspect - 0.5) / 0.6)) * 4.0;   // how much of the island's width to show
+  const dist = Math.max(14.5, halfW / (tanV * aspect), 6.6 / tanV);
+  const el = 38 * DEG, tgt = [0, 1.5, -4.8];
   return { pos: [0, tgt[1] + dist * Math.sin(el), tgt[2] + dist * Math.cos(el)], target: tgt, fov };
 }
 
-// ------------------------------------------------------------------ the island
-function island(THREE) {
-  const g = new THREE.Group(); g.name = "Island";
-  const r = rng(42), cx = 0, cz = -4.3, RX = 9.0, RZ = 8.2, N = 96, rim = [];
-  for (let i = 0; i < N; i++) {
-    const a = (i / N) * Math.PI * 2, k = 1 + 0.05 * Math.sin(a * 3 + 1) + 0.035 * Math.sin(a * 7) + (r() - 0.5) * 0.02;
-    rim.push([cx + Math.cos(a) * RX * k, cz + Math.sin(a) * RZ * k]);
-  }
-  // the grass: a gently domed disc, lighter in the middle
-  const top = new THREE.BufferGeometry(), pos = [cx, 0, cz], col = [], idx = [];
-  const c0 = new THREE.Color("#A8E07C"), c1 = new THREE.Color("#72C766");
-  col.push(c0.r, c0.g, c0.b);
-  const RINGS = 6;
-  for (let k = 1; k <= RINGS; k++) {
-    const t = k / RINGS, c = c0.clone().lerp(c1, t * t);
-    for (const [x, z] of rim) { pos.push(cx + (x - cx) * t, -0.12 * t * t, cz + (z - cz) * t); col.push(c.r, c.g, c.b); }
-  }
-  for (let i = 0; i < N; i++) idx.push(0, 1 + ((i + 1) % N), 1 + i);
-  for (let k = 1; k < RINGS; k++) for (let i = 0; i < N; i++) {
-    const a = 1 + (k - 1) * N + i, b = 1 + (k - 1) * N + ((i + 1) % N), c = a + N, d = b + N;
-    idx.push(a, b, d, a, d, c);
-  }
-  top.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); top.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
-  top.setIndex(idx); top.computeVertexNormals();
-  g.add(new THREE.Mesh(top, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92 })));
-  // the cliff and the rock underneath: rings narrowing to a point, with a band of dark earth under the grass
-  const LAY = 9, depth = 6.2, rock = new THREE.BufferGeometry(), rp = [], rc = [], ri = [];
-  const earth = new THREE.Color("#8C6A5A"), stone = new THREE.Color("#B7A7D6"), deep = new THREE.Color("#7D6FB0");
-  for (let k = 0; k <= LAY; k++) {
-    const t = k / LAY, shrink = Math.pow(1 - t, 1.45) * (k ? 0.96 : 1), y = -0.12 - t * depth - (k ? 0.18 : 0);
-    const c = k === 0 ? earth : k === 1 ? earth.clone().lerp(stone, 0.4) : stone.clone().lerp(deep, t);
-    for (const [x, z] of rim) {
-      const j = k > 0 && k < LAY ? 1 + (r() - 0.5) * 0.14 : 1;
-      rp.push(cx + (x - cx) * shrink * j, y + (k > 0 && k < LAY ? (r() - 0.5) * 0.25 : 0), cz + (z - cz) * shrink * j); rc.push(c.r, c.g, c.b);
+// ------------------------------------------------------------------ the lawn and the rock under it
+const HEX_R = 1.1547;          // a cell's corner radius (2 across the flats)
+const hexCorner = (x, z, s, i) => { const a = (i / 6) * Math.PI * 2 + Math.PI / 6; return [x + Math.cos(a) * HEX_R * s, z + Math.sin(a) * HEX_R * s]; };
+/** Soft patches of lighter and darker green, so the lawn doesn't read as one flat colour. */
+const patch = (x, z) => 0.5 + 0.22 * Math.sin(x * 0.62 + z * 0.31) + 0.16 * Math.sin(x * 1.7 - z * 1.25 + 1.7) + 0.12 * Math.sin(x * 3.3 + z * 3.9 + 0.4);
+
+/** The lawn: every cell as one seamless surface (no seams between tiles), finely split so its colour can vary, and a
+ *  grass lip over a band of earth round the outer edge. */
+function lawn(THREE, tiles) {
+  const verts = new Map(), pos = [], col = [], idx = [];
+  const dark = new THREE.Color("#5FB43C"), mid = new THREE.Color("#7FCB47"), light = new THREE.Color("#A2DE5E"), c = new THREE.Color();
+  const vert = (x, y, z, color) => {
+    const k = `${x.toFixed(3)},${y.toFixed(3)},${z.toFixed(3)}`;
+    if (color === undefined && verts.has(k)) return verts.get(k);
+    const n = pos.length / 3; pos.push(x, y, z);
+    if (color) col.push(color.r, color.g, color.b);
+    else { const p = Math.max(0, Math.min(1, patch(x, z))); c.copy(dark).lerp(mid, Math.min(1, p * 1.6)).lerp(light, Math.max(0, p - 0.62) * 2.2); col.push(c.r, c.g, c.b); }
+    if (color === undefined) verts.set(k, n);
+    return n;
+  };
+  const N = 3, has = new Set(tiles.map(([x, z]) => `${Math.round(x)},${Math.round(z * 10)}`));
+  const lip = new THREE.Color("#4E9A34"), soil = new THREE.Color("#8A6244"), soilDeep = new THREE.Color("#6E4B39");
+  for (const [x, z] of tiles) {
+    for (let i = 0; i < 6; i++) {
+      const [ax, az] = hexCorner(x, z, 1, i), [bx, bz] = hexCorner(x, z, 1, i + 1);
+      // the triangle (centre, a, b) split into N×N little ones
+      const P = (u, w) => vert(x + (ax - x) * u + (bx - ax) * w, 0, z + (az - z) * u + (bz - az) * w);
+      for (let r = 0; r < N; r++) for (let k = 0; k <= r; k++) {
+        const u0 = r / N, u1 = (r + 1) / N;
+        idx.push(P(u0, k / N), P(u1, (k + 1) / N), P(u1, k / N));
+        if (k < r) idx.push(P(u0, k / N), P(u0, (k + 1) / N), P(u1, (k + 1) / N));
+      }
+      // an outer edge (no cell beyond it): the grass lip and the earth under it
+      const nx = x + ((ax + bx) / 2 - x) * 2, nz = z + ((az + bz) / 2 - z) * 2;
+      if (!has.has(`${Math.round(nx)},${Math.round(nz * 10)}`)) {
+        const band = (y0, y1, c0, c1, out0, out1) => {
+          const o0 = 1 + out0, o1 = 1 + out1;
+          const [a0x, a0z] = hexCorner(x, z, o0, i), [b0x, b0z] = hexCorner(x, z, o0, i + 1), [a1x, a1z] = hexCorner(x, z, o1, i), [b1x, b1z] = hexCorner(x, z, o1, i + 1);
+          const a = vert(a0x, y0, a0z, c0), b = vert(b0x, y0, b0z, c0), d = vert(a1x, y1, a1z, c1), e = vert(b1x, y1, b1z, c1);
+          idx.push(a, b, d, b, e, d);
+        };
+        band(0, -0.07, lip, lip, 0, 0.012);
+        band(-0.07, -0.18, lip, lip.clone().multiplyScalar(0.8), 0.012, 0);
+        band(-0.18, -1.0, soil, soilDeep, -0.004, -0.02);
+      }
     }
   }
-  for (let k = 0; k < LAY; k++) for (let i = 0; i < N; i++) {
-    const a = k * N + i, b = k * N + ((i + 1) % N), c = a + N, d = b + N;
-    ri.push(a, d, b, a, c, d);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+  m.name = "Lawn"; m.receiveShadow = true;
+  return m;
+}
+
+// Every cell gets a column of rock under it, longest in the middle, in two or three tapering steps: the island's
+// underside reads as stacked basalt, earthy under the grass and lavender stone further down.
+function underside(THREE, tiles) {
+  const r = rng(42), pos = [], col = [];
+  const earth = new THREE.Color("#6E4B39"), stone = new THREE.Color("#B6A6D8"), deep = new THREE.Color("#7466AE");
+  const cx = 0, cz = -5.6;
+  const quad = (a, b, c, d, ca, cb) => { pos.push(...a, ...b, ...c, ...a, ...c, ...d); col.push(...ca, ...cb, ...cb, ...ca, ...cb, ...ca); };
+  for (const [tx, tz] of tiles) {
+    let x = tx, z = tz;
+    const d = Math.hypot((x - cx) / 9.5, (z - cz) / 8.5);
+    const depth = 1.3 + Math.max(0, 1 - d) * 5.6 + r() * 0.8;
+    const steps = depth > 4 ? 3 : 2;
+    let y0 = -0.99, s0 = 0.985;
+    for (let k = 0; k < steps; k++) {
+      const y1 = -0.99 - depth * ((k + 1) / steps) * (0.9 + r() * 0.2), s1 = Math.max(0.25, s0 * (0.82 - r() * 0.12));
+      const ox = (r() - 0.5) * 0.25, oz = (r() - 0.5) * 0.25;
+      const t0 = (-y0 - 1) / 7, t1 = (-y1 - 1) / 7;
+      const c0 = k === 0 ? earth : stone.clone().lerp(deep, Math.min(1, t0)), c1 = stone.clone().lerp(deep, Math.min(1, t1));
+      for (let i = 0; i < 6; i++) {
+        const [ax, az] = hexCorner(x, z, s0, i), [bx, bz] = hexCorner(x, z, s0, i + 1);
+        const [cx1, cz1] = hexCorner(x + ox, z + oz, s1, i + 1), [dx, dz] = hexCorner(x + ox, z + oz, s1, i);
+        quad([ax, y0, az], [bx, y0, bz], [cx1, y1, cz1], [dx, y1, dz], [c0.r, c0.g, c0.b], [c1.r, c1.g, c1.b]);
+      }
+      // cap the bottom of the last step with a shallow point
+      if (k === steps - 1) for (let i = 0; i < 6; i++) {
+        const [ax, az] = hexCorner(x + ox, z + oz, s1, i), [bx, bz] = hexCorner(x + ox, z + oz, s1, i + 1);
+        pos.push(x + ox, y1 - 0.15, z + oz, bx, y1, bz, ax, y1, az); col.push(c1.r, c1.g, c1.b, c1.r, c1.g, c1.b, c1.r, c1.g, c1.b);
+      }
+      y0 = y1; s0 = s1; x += ox; z += oz;
+    }
   }
-  rock.setAttribute("position", new THREE.Float32BufferAttribute(rp, 3)); rock.setAttribute("color", new THREE.Float32BufferAttribute(rc, 3));
-  rock.setIndex(ri); rock.computeVertexNormals();
-  g.add(new THREE.Mesh(rock, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true })));
-  // a few small rocks floating below
-  const bits = new THREE.MeshStandardMaterial({ color: "#B4A5D8", roughness: 0.8, flatShading: true });
-  for (const [x, y, z, s] of [[-10.5, -2.6, -2, 0.9], [10.8, -3.4, -6, 0.7], [-8.2, -5.2, -9, 0.6], [7.5, -1.8, 2.2, 0.5]]) {
-    const m = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), bits); m.position.set(x, y, z); m.userData.float = r() * 6; g.add(m);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true, side: THREE.DoubleSide }));
+  m.name = "Underside";
+  return m;
+}
+
+// ------------------------------------------------------------------ dirt paths
+function pathTexture(THREE) {
+  const c = document.createElement("canvas"); c.width = 64; c.height = 256;
+  const g = c.getContext("2d"), r = rng(3);
+  const grd = g.createLinearGradient(0, 0, 64, 0);
+  grd.addColorStop(0, "rgba(226,196,140,0)"); grd.addColorStop(0.16, "rgba(222,190,132,0.9)"); grd.addColorStop(0.5, "rgba(240,214,160,1)");
+  grd.addColorStop(0.84, "rgba(222,190,132,0.9)"); grd.addColorStop(1, "rgba(226,196,140,0)");
+  g.fillStyle = grd; g.fillRect(0, 0, 64, 256);
+  for (let i = 0; i < 22; i++) {                                         // a few pebbles
+    g.fillStyle = `rgba(${190 + r() * 30},${160 + r() * 25},${115 + r() * 25},${0.55 + r() * 0.3})`;
+    g.beginPath(); g.ellipse(16 + r() * 32, r() * 256, 1.2 + r() * 1.8, 0.9 + r() * 1.3, r() * 3, 0, Math.PI * 2); g.fill();
   }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  return t;
+}
+function pathMesh(THREE, paths) {
+  const mat = new THREE.MeshStandardMaterial({ map: pathTexture(THREE), transparent: true, depthWrite: false, roughness: 1, polygonOffset: true, polygonOffsetFactor: -2 });
+  const geos = [];
+  for (const pts of paths) {
+    const curve = new THREE.CatmullRomCurve3(pts.map(([x, z]) => new THREE.Vector3(x, 0.012, z)), false, "centripetal");
+    const N = Math.max(8, Math.round(curve.getLength() * 6)), W = 0.36, pos = [], uv = [], idx = [];
+    let len = 0, prev = null;
+    for (let i = 0; i <= N; i++) {
+      const t = i / N, p = curve.getPoint(t), tg = curve.getTangent(t), nx = -tg.z, nz = tg.x, nl = Math.hypot(nx, nz) || 1;
+      if (prev) len += p.distanceTo(prev); prev = p;
+      const w = W * (0.92 + 0.08 * Math.sin(len * 2.3)) * (i === 0 || i === N ? 0.6 : 1);
+      pos.push(p.x + (nx / nl) * w, p.y, p.z + (nz / nl) * w, p.x - (nx / nl) * w, p.y, p.z - (nz / nl) * w);
+      uv.push(0, len / 1.6, 1, len / 1.6);
+      if (i) { const a = (i - 1) * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx); g.setAttribute("normal", new THREE.Float32BufferAttribute(new Array(pos.length).fill(0).map((_, i) => i % 3 === 1 ? 1 : 0), 3)); geos.push(g);
+  }
+  const m = new THREE.Mesh(mergeGeometries(geos), mat); m.name = "Paths"; m.receiveShadow = true; m.renderOrder = 1;
+  return m;
+}
+
+// ------------------------------------------------------------------ the pond
+const pondEdge = (r, a) => r * (1 + 0.12 * Math.sin(3 * a + 1) + 0.07 * Math.sin(5 * a + 0.3));
+function pond(THREE, x, z, r) {
+  const g = new THREE.Group(); g.name = "Pond"; g.position.set(x, 0, z);
+  const N = 48;
+  // a sandy bank, then the water: pale and shallow at the edge, deep blue in the middle
+  const ring = (inner, outer, y, cIn, cOut) => {
+    const pos = [], col = [], idx = [];
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      for (const [k, c] of [[inner, cIn], [outer, cOut]]) { const rr = pondEdge(r, a) * k; pos.push(Math.cos(a) * rr, y, Math.sin(a) * rr); col.push(c.r, c.g, c.b); }
+      if (i) { const b = (i - 1) * 2; idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3); }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+    geo.setIndex(idx); geo.computeVertexNormals();
+    return geo;
+  };
+  const C = h => new THREE.Color(h);
+  const bank = new THREE.Mesh(ring(0.92, 1.2, 0.01, C("#E9D29C"), C("#CDE58A")), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+  bank.receiveShadow = true;
+  const water = new THREE.Mesh(ring(0, 0.97, 0.022, C("#2F8FD8"), C("#8FE3F2")), new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.08, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 1.4 }));
+  water.receiveShadow = true;
+  // a few glints that drift and twinkle on the surface
+  const glint = new THREE.MeshBasicMaterial({ color: "#FFFFFF", transparent: true, opacity: 0.8, depthWrite: false });
+  const glints = [];
+  for (let i = 0; i < 4; i++) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.025), glint); m.rotation.x = -Math.PI / 2; m.position.y = 0.03;
+    m.userData = { a: i * 1.3, d: 0.2 + (i % 3) * 0.22, ph: i * 2.1 }; g.add(m); glints.push(m);
+  }
+  g.add(bank, water);
+  g.userData.tick = t => glints.forEach(m => {
+    const u = m.userData, a = u.a + t * 0.06;
+    m.position.x = Math.cos(a) * r * u.d; m.position.z = Math.sin(a) * r * u.d;
+    m.scale.setScalar(0.6 + 0.5 * Math.max(0, Math.sin(t * 1.3 + u.ph)));
+  });
   return g;
+}
+
+// ------------------------------------------------------------------ wind
+const wind = { value: 0 };
+/** Make a material sway with the wind: vertices move by `aSway` (0 at the roots, 1 at the tips). */
+function windy(mat, amount, instanced = false) {
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uWind = wind;
+    sh.vertexShader = sh.vertexShader
+      .replace("#include <common>", "#include <common>\nuniform float uWind; attribute float aSway;")
+      .replace("#include <begin_vertex>", `#include <begin_vertex>
+        vec3 wp = ${instanced ? "instanceMatrix[3].xyz" : "transformed"};
+        float sw = sin(uWind * 1.7 + wp.x * 0.55 + wp.z * 0.4) * 0.7 + sin(uWind * 2.9 + wp.x * 1.3) * 0.3;
+        transformed.x += sw * ${amount.toFixed(3)} * aSway;
+        transformed.z += cos(uWind * 1.3 + wp.z * 0.6) * ${(amount * 0.5).toFixed(3)} * aSway;`);
+  };
+  mat.customProgramCacheKey = () => `windy${amount}${instanced}`;
+  return mat;
+}
+
+/** Grass tufts and flowers over the open grass, as two instanced meshes. */
+function meadow(THREE, tiles, keepOut) {
+  // a tuft: five blades, dark at the root, bright at the tip
+  const pos = [], col = [], sway = [], root = new THREE.Color("#5CAE3A"), tip = new THREE.Color("#BDF07A");
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + 0.3, lean = 0.05 + (i % 2) * 0.04, h = 0.15 + ((i * 7) % 5) * 0.025, w = 0.03;
+    const bx = Math.cos(a) * 0.05, bz = Math.sin(a) * 0.05, px = -Math.sin(a) * w, pz = Math.cos(a) * w;
+    pos.push(bx - px, 0, bz - pz, bx + px, 0, bz + pz, bx + Math.cos(a) * lean, h, bz + Math.sin(a) * lean);
+    col.push(root.r, root.g, root.b, root.r, root.g, root.b, tip.r, tip.g, tip.b); sway.push(0, 0, 1);
+  }
+  const tuft = new THREE.BufferGeometry();
+  tuft.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); tuft.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  tuft.setAttribute("aSway", new THREE.Float32BufferAttribute(sway, 1)); tuft.computeVertexNormals();
+  // light the blades from above, whichever way they face (no dark backs)
+  const n = tuft.getAttribute("normal"); for (let i = 0; i < n.count; i++) n.setXYZ(i, 0, 1, 0);
+  const flower = new THREE.OctahedronGeometry(0.045, 0); flower.translate(0, 0.17, 0);
+  flower.setAttribute("aSway", new THREE.Float32BufferAttribute(new Array(flower.getAttribute("position").count).fill(1), 1));
+  const r = rng(11), spots = [], blooms = [];
+  for (const [x, z] of tiles) for (let i = 0; i < 16; i++) {
+    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * 1.05, px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
+    if (keepOut(px, pz)) continue;
+    spots.push([px, pz]);
+    if (r() < 0.12) blooms.push([px + 0.05, pz + 0.04]);
+  }
+  const mk = (geo, list, mat, scale, colors) => {
+    const m = new THREE.InstancedMesh(geo, mat, list.length), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3(), M = new THREE.Matrix4();
+    const tints = colors && colors.map(c => new THREE.Color(c));
+    list.forEach(([x, z], i) => {
+      const k = scale * (0.75 + r() * 0.6);
+      M.compose(p.set(x, 0, z), q.setFromEuler(e.set(0, r() * Math.PI * 2, 0)), s.set(k, k * (0.8 + r() * 0.5), k));
+      m.setMatrixAt(i, M);
+      if (tints) m.setColorAt(i, tints[Math.floor(r() * tints.length)]);
+    });
+    m.receiveShadow = true;
+    return m;
+  };
+  const grass = mk(tuft, spots, windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide }), 0.06, true), 1);
+  const flowers = mk(flower, blooms, windy(new THREE.MeshStandardMaterial({ roughness: 0.6, emissive: "#ffffff", emissiveIntensity: 0.08 }), 0.05, true), 1,
+    ["#FFFFFF", "#FFD8F0", "#FFE680", "#FF9FC8", "#CFC4FF"]);
+  grass.name = "Grass"; flowers.name = "Flowers";
+  return [grass, flowers];
 }
 
 // ------------------------------------------------------------------ the stage
@@ -104,9 +288,9 @@ export function createKingdom({ url }) {
   let ctl = null, pending = null;
   const stage = {
     orbit: true,
-    controls: { minDistance: 12, maxDistance: 34, minPolarAngle: 38 * DEG, maxPolarAngle: 72 * DEG, minAzimuthAngle: -55 * DEG, maxAzimuthAngle: 55 * DEG, enablePan: false },
+    controls: { minDistance: 12, maxDistance: 34, minPolarAngle: 36 * DEG, maxPolarAngle: 70 * DEG, minAzimuthAngle: -55 * DEG, maxAzimuthAngle: 55 * DEG, enablePan: false },
     view, background: paintKingdomSky,
-    light: { scale: 1.08, env: 1.0 },
+    light: { scale: 0.7, env: 1.0 },
     build(ctx) { ctl = build(ctx, url, () => want); if (pending) { ctl.moment(pending); pending = null; } return ctl.update; },
   };
   return {
@@ -117,13 +301,25 @@ export function createKingdom({ url }) {
   };
 }
 
-function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
+function build({ THREE, scene, renderer, BLOOM_LAYER }, url, getState) {
   // Bulbu stands at the origin; the island sits a little behind it, so Bulbu reads big in front of its kingdom
   const root = new THREE.Group(); root.name = "KingdomStage"; root.position.z = -1.0; scene.add(root);
   const mark = o => { o.traverse(m => { m.userData.noMask = true; }); return o; };
-  root.add(mark(island(THREE)));
-  const B = {};           // id -> { node, floors[], roof, scaffold, plot, mats[], fog: { group, puffs, now }, level, shown }
-  let treasure = null, treasureKey = "", dome = null, coins = null, loaded = false, treasureAt = null;
+  const B = {};           // id -> { node, levels[], scaffold, plot, mats[], tops[], fog, level, shown }
+  let treasure = null, treasureKey = "", coins = null, loaded = false, treasureAt = null, shadowFrames = 0;
+  const floaters = [];
+
+  // sunlight from the upper left (a little behind, so shadows fall towards you and to the right), with soft shadows. The island doesn't move, so the shadow map is drawn only when
+  // something changes (a level going up, a plot turning into a building), not every frame.
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.shadowMap.autoUpdate = false;
+  const sun = new THREE.DirectionalLight("#FFF1DA", 1.9);
+  sun.position.set(-13, 15, -8); sun.target.position.set(0, 0, -5.5);
+  sun.castShadow = true;
+  Object.assign(sun.shadow.camera, { left: -15, right: 15, top: 13, bottom: -13, near: 2, far: 40 });
+  sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.025; sun.shadow.radius = 3;
+  root.add(sun, sun.target);
+  const sky = new THREE.HemisphereLight("#CFE0FF", "#7DBE5A", 0.35); root.add(sky);   // a touch of green bounce off the grass
+  const reshadow = (n = 2) => { shadowFrames = Math.max(shadowFrames, n); };
 
   // the treasure: a glowing gold orb until there's a photo of the real thing
   const orbMat = new THREE.MeshStandardMaterial({ color: "#FFC94A", emissive: "#FFB21F", emissiveIntensity: 0.9, metalness: 0.6, roughness: 0.25 });
@@ -139,15 +335,20 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
   })();
   const fogMat = () => new THREE.SpriteMaterial({ map: puffTex, color: "#6F64A6", transparent: true, opacity: 0, depthWrite: false });
+  const box = new THREE.Box3(), v = new THREE.Vector3();
   function makeFog(b) {
     const g = new THREE.Group(); g.name = b.id + "_Dim";
-    const box = new THREE.Box3().setFromObject(b.node), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+    // round the building as it is at level 3 (a fair middle size), in the stage's space
+    const ref = b.levels[2] ?? b.levels[0];
+    const was = ref.visible; ref.visible = true; box.setFromObject(ref); ref.visible = was;
+    const size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+    root.worldToLocal(c); const minY = box.min.y;
     const mat = fogMat(), r = rng(b.id.length * 31), puffs = [];
     const R = Math.max(size.x, size.z) * 0.55 + 0.4, H = Math.min(size.y, 4.5);
     // mostly a low bank round the base, a few wisps higher up
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * Math.PI * 2 + r(), p = new THREE.Sprite(mat), low = i % 3 !== 2;
-      p.userData.base = new THREE.Vector3(c.x + Math.cos(a) * R * (0.75 + r() * 0.35), box.min.y + (low ? 0.25 + r() * 0.5 : 0.9 + r() * H * 0.6), c.z + Math.sin(a) * R * (0.75 + r() * 0.35));
+      p.userData.base = new THREE.Vector3(c.x + Math.cos(a) * R * (0.75 + r() * 0.35), minY + (low ? 0.25 + r() * 0.5 : 0.9 + r() * H * 0.6), c.z + Math.sin(a) * R * (0.75 + r() * 0.35));
       p.userData.s = 1.5 + r() * 1.0; p.userData.ph = r() * 6;
       p.position.copy(p.userData.base); p.scale.setScalar(0.001); p.renderOrder = 3;
       g.add(p); puffs.push(p);
@@ -168,31 +369,82 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
   let stormNow = 0, stormGone = 0, stormFor = null;
 
   new GLTFLoader().load(url, gltf => {
-    const k = gltf.scene; mark(k); root.add(k);
-    k.traverse(o => { if (o.isMesh) { o.frustumCulled = false; o.castShadow = false; } });
+    const k = gltf.scene; k.updateMatrixWorld(true);
+    const byName = n => k.getObjectByName(n);
+
+    // ---- the ground and the scenery: baked into two meshes (one sways in the wind)
+    const tiles = [];
+    byName("Ground")?.children.forEach(t => tiles.push([t.position.x, t.position.z]));
+    const still = [], swaying = [];
+    let sharedMat = null;
+    const bake = (o, sw) => {
+      o.traverse(m => {
+        if (!m.isMesh) return;
+        sharedMat ??= m.material;
+        const g = m.geometry.clone();
+        for (const a of Object.keys(g.attributes)) if (!["position", "normal", "uv"].includes(a)) g.deleteAttribute(a);
+        if (!g.index) g.setIndex([...Array(g.getAttribute("position").count).keys()]);
+        // how far up the tree each vertex is (0 at the trunk's foot, 1 at the top): that's how much it sways
+        g.computeBoundingBox();
+        const p = g.getAttribute("position"), lo = g.boundingBox.min.y, hi = g.boundingBox.max.y, s = new Float32Array(p.count);
+        for (let i = 0; i < p.count; i++) s[i] = sw ? Math.pow(Math.max(0, (p.getY(i) - lo) / Math.max(0.01, hi - lo)), 1.6) : 0;
+        g.setAttribute("aSway", new THREE.BufferAttribute(s, 1));
+        g.applyMatrix4(m.matrixWorld);
+        (sw ? swaying : still).push(g);
+      });
+      o.parent.remove(o);
+    };
+    for (const n of ["Ground", "Decor"]) {
+      const g = byName(n); if (!g) continue;
+      for (const c of [...g.children]) bake(c, c.name.startsWith("Sway_"));
+    }
+    const groundMat = sharedMat.clone(); groundMat.roughness = 0.85;
+    const treeMat = windy(sharedMat.clone(), 0.045); treeMat.roughness = 0.8;
+    for (const [geos, mat, name] of [[still, groundMat, "Scenery"], [swaying, treeMat, "Trees"]]) {
+      if (!geos.length) continue;
+      const m = new THREE.Mesh(mergeGeometries(geos), mat); m.name = name;
+      m.castShadow = true; m.receiveShadow = true; root.add(mark(m));
+    }
+    root.add(mark(lawn(THREE, tiles)), mark(underside(THREE, tiles)));
+
+    // ---- paths, then grass and flowers everywhere that's open
+    const paths = (byName("Paths")?.children ?? []).map(p => p.children.map(c => [c.position.x, c.position.z]));
+    byName("Paths")?.removeFromParent();
+    if (paths.length) root.add(mark(pathMesh(THREE, paths)));
+    const pn = byName("Pond"), pondAt = pn ? [pn.position.x, pn.position.z, pn.userData.r ?? 0.95] : null;
+    if (pondAt) { const p = pond(THREE, ...pondAt); root.add(mark(p)); floaters.push(p); pn.removeFromParent(); }
+    const homes = KINGDOM_IDS.map(id => byName(id)).filter(Boolean).map(n => [n.position.x, n.position.z]);
+    const segD = (x, z, [ax, az], [bx, bz]) => { const dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz))); return Math.hypot(x - ax - t * dx, z - az - t * dz); };
+    const keepOut = (x, z) => homes.some(([hx, hz]) => Math.hypot(x - hx, z - hz) < 1.25) || paths.some(p => p.some((a, i) => i && segD(x, z, p[i - 1], a) < 0.45))
+      || Math.hypot(x, z - 1) < 0.9                                        // Bulbu's spot
+      || (pondAt && Math.hypot(x - pondAt[0], z - pondAt[1]) < pondAt[2] * 1.3);
+    for (const m of meadow(THREE, tiles, keepOut)) root.add(mark(m));
+
+    // ---- clouds drifting round the island
+    for (const c of [...(byName("Clouds")?.children ?? [])]) {
+      c.userData.float = rng(c.id)() * 6; c.userData.drift = c.position.x; c.traverse(m => { if (m.isMesh) { m.material = m.material.clone(); m.material.roughness = 1; m.material.emissive = new THREE.Color("#ffffff"); m.material.emissiveIntensity = 0.25; } });
+      floaters.push(c);
+    }
+
+    mark(k); root.add(k);
+    k.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     for (const id of KINGDOM_IDS) {
-      const node = k.getObjectByName(id); if (!node) continue;
+      const node = byName(id); if (!node) continue;
       // each building gets its own copy of the shared palette material, so it can glow and dim on its own
       const mats = new Map();
       node.traverse(o => { if (!o.isMesh) return; const m = o.material; if (!mats.has(m)) { const c = m.clone(); c.userData.base = c.color.clone(); mats.set(m, c); } o.material = mats.get(m); });
       const by = n => node.getObjectByName(n);
-      B[id] = {
-        id, node, mats: [...mats.values()],
-        floors: Array.from({ length: FLOORS }, (_, i) => by(`${id}_F${i + 1}`)).filter(Boolean),
-        roof: by(`${id}_Roof`), scaffold: by(`${id}_Scaffold`), plot: by(`${id}_Plot`), model: by(`${id}_Model`),
-        level: 0, shown: null, pop: new Map(),
-      };
-      B[id].floors.forEach(f => { f.visible = false; });
+      const levels = Array.from({ length: LEVELS }, (_, i) => by(`${id}_L${i + 1}`)).filter(Boolean);
+      B[id] = { id, node, mats: [...mats.values()], levels, scaffold: by(`${id}_Scaffold`), plot: by(`${id}_Plot`), level: 0, shown: null, pop: null };
+      // the top of each level (for labels, the storm and the treasure), in the stage's space
+      B[id].tops = [...levels, B[id].plot].map(l => {
+        if (!l) return null;
+        box.setFromObject(l); const c = box.getCenter(new THREE.Vector3()); c.y = box.max.y; return root.worldToLocal(c);
+      });
+      levels.forEach(l => { l.visible = false; });
     }
     for (const b of Object.values(B)) b.fog = makeFog(b);
-    // the observatory's glass dome, the vault's coin piles
-    const domeAt = k.getObjectByName("Observatory_Dome");
-    if (domeAt) {
-      dome = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-        new THREE.MeshPhysicalMaterial({ color: "#CFE6FF", roughness: 0.05, metalness: 0, transmission: 0.6, transparent: true, opacity: 0.75, clearcoat: 1 }));
-      mark(dome); domeAt.add(dome);
-    }
-    const coinsAt = k.getObjectByName("Vault_Coins");
+    const coinsAt = byName("Vault_Coins");
     if (coinsAt) {
       coins = new THREE.Group();
       const coinMat = new THREE.MeshStandardMaterial({ color: "#FFCF4D", metalness: 0.75, roughness: 0.3, emissive: "#8A5A00", emissiveIntensity: 0.25 });
@@ -200,13 +452,13 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
       for (let i = 0; i < 26; i++) {
         const c = new THREE.Mesh(coinGeo, coinMat), pile = i % 3, a = r() * Math.PI * 2, rr = r() * 0.16;
         c.position.set((pile - 1) * 0.32 + Math.cos(a) * rr, 0.015 + Math.floor(i / 3) * 0.028, Math.sin(a) * rr);
-        c.rotation.set((r() - 0.5) * 0.3, r() * 3, (r() - 0.5) * 0.3); coins.add(c);
+        c.rotation.set((r() - 0.5) * 0.3, r() * 3, (r() - 0.5) * 0.3); c.castShadow = true; coins.add(c);
       }
       mark(coins); coinsAt.add(coins);
     }
-    treasureAt = k.getObjectByName("Castle_Treasure");
+    treasureAt = byName("Castle_Treasure");
     if (treasureAt) { mark(orbGroup); treasureAt.add(orbGroup); }
-    loaded = true; apply();
+    loaded = true; apply(); reshadow(3);
     if (queued) { const m = queued; queued = null; moment(m); }
   }, undefined, err => console.warn("kingdom", err));
 
@@ -236,44 +488,42 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
     } catch { orbGroup.visible = true; }
   }
 
+  // the top of a building as it stands now (its level, or its plot)
+  const topOf = b => (b.level ? b.tops[b.level - 1] : b.tops[b.tops.length - 1]) ?? b.node.position;
+
   // ---- apply the app's state: levels, construction, plots, glow and the Dim
   function apply() {
     if (!loaded) return;
     const s = getState(), on = new Map(s.buildings.map(b => [b.id, b]));
+    let changed = false;
     for (const [id, b] of Object.entries(B)) {
       const st = on.get(id), plot = !st && s.plots.includes(id);
-      b.node.visible = !!st || plot;
+      const level = st ? Math.max(1, Math.min(b.levels.length, st.level)) : 0;
+      const vis = !!st || plot;
+      if (b.node.visible !== vis || (b.plot && b.plot.visible !== plot) || b.level !== level) changed = true;
+      b.node.visible = vis;
       if (b.plot) b.plot.visible = plot;
-      const showParts = !!st;
-      if (b.model) b.model.visible = showParts;
-      const maxF = b.floors.length || FLOORS, level = st ? Math.max(1, Math.min(maxF, st.level)) : 0;
-      b.floors.forEach((f, i) => {
-        const vis = showParts && i < level;
-        if (vis && !f.visible && b.shown !== null) b.pop.set(f, 0);      // a new floor pops up
-        f.visible = vis;
+      b.levels.forEach((l, i) => {
+        const show = i === level - 1;
+        if (show && !l.visible && b.shown !== null) b.pop = { node: l, t: 0 };          // a new level pops up
+        l.visible = show;
       });
-      // while it's being built the roof sits on top of the scaffolding (the floor in progress); then it comes down
-      if (b.roof) { b.roof.visible = showParts; b.roof.position.y = level + (st?.building && level < maxF ? 1 : 0); }
-      if (b.scaffold) {
-        b.scaffold.visible = showParts && !!st.building;
-        if (id !== "Arena") b.scaffold.position.y = Math.min(level, maxF - 1);
-        if (b.roof && level >= maxF) b.scaffold.visible = false;
-      }
+      const sc = !!st && !!st.building && level < b.levels.length;
+      if (b.scaffold) { if (b.scaffold.visible !== sc) changed = true; b.scaffold.visible = sc; }
       b.level = level; b.shown = !!st;
       b.target = { glow: st ? st.glow : 0, fog: st ? st.fog : 0 };
     }
+    if (changed) reshadow(2);
     // the raid's storm sits over its target; when it's held off it scatters, then goes
     const r = s.raid, tb = r && B[r.id];
     if (tb && r.state !== "defended") {
-      tb.node.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(tb.node), c = box.getCenter(new THREE.Vector3());
-      storm.position.set(c.x, box.max.y - 0.7, c.z); root.worldToLocal(storm.position);   // round the roof, under its label
+      const top = topOf(tb);
+      storm.position.set(top.x, top.y - 0.7, top.z);                         // round the roof, under its label
       stormFor = { state: r.state, near: Math.max(0, Math.min(1, r.near ?? 0.5)) }; stormGone = 0;
     } else if (stormFor && r?.state === "defended") stormFor = { ...stormFor, state: "defended" };
     else if (!r) stormFor = null;
-    // the treasure floats just above the castle's roof, wherever the roof is now
-    const cr = B.Castle?.roof;
-    if (treasureAt && cr) treasureAt.position.y = cr.position.y + 2.2;
+    // the treasure floats just above the castle's top, whichever level is showing
+    if (treasureAt && B.Castle) treasureAt.position.y = (topOf(B.Castle).y + 0.9) / B.Castle.node.scale.y;
     setTreasure(s.treasure);
   }
 
@@ -289,9 +539,14 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
   }
   const EV = 3.2;           // seconds the moment takes
 
-  const tint = new THREE.Color("#6E648F"), warm = new THREE.Color("#FFC867"), v = new THREE.Vector3();
+  const tint = new THREE.Color("#6E648F"), warm = new THREE.Color("#FFC867");
   function update(dt, t) {
-    root.traverse(o => { if (o.userData.float != null) o.position.y += Math.sin(t * 0.6 + o.userData.float) * 0.0015; });
+    wind.value = t;
+    for (const c of floaters) {
+      if (c.userData.tick) { c.userData.tick(t); continue; }
+      c.position.y += Math.sin(t * 0.5 + c.userData.float) * 0.002; c.position.x = c.userData.drift + Math.sin(t * 0.05 + c.userData.float) * 1.2;
+    }
+    if (shadowFrames > 0) { renderer.shadowMap.needsUpdate = true; shadowFrames--; }
     if (!loaded) return;
     const k = 1 - Math.exp(-dt * 2.2);
     for (const b of Object.values(B)) {
@@ -308,7 +563,7 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
       b.glowNow = (b.glowNow ?? 0) + (tg.glow - (b.glowNow ?? 0)) * (ev ? k * 0.4 : k);
       const f = ev && ev.kind === "light" ? Math.max(b.fog.now, ev.from * (1 - Math.min(1, ev.t / EV))) : b.fog.now, gl = b.glowNow + flare;
       // dim the building under the fog, warm it when it glows
-      for (const m of b.mats) { m.color.copy(m.userData.base).lerp(tint, f * 0.6); m.emissive.copy(warm); m.emissiveIntensity = gl * 0.22 * (1 - f); }
+      for (const m of b.mats) { m.color.copy(m.userData.base).lerp(tint, f * 0.6); m.emissive.copy(warm); m.emissiveIntensity = gl * 0.2 * (1 - f); }
       // even a little of the Dim shows (a short scroll should be seen), and it thickens from there
       b.fog.mat.opacity = (f > 0.01 ? Math.min(0.8, 0.28 + f * 0.75) : 0) * (spread > 1 && ev?.kind === "light" ? Math.max(0, 1 - (spread - 1) / 1.3) : 1);
       b.fog.group.visible = f > 0.01;
@@ -319,12 +574,12 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
         p.position.copy(p.userData.base).add(v.set(Math.sin(t * 0.25 + p.userData.ph) * 0.35, Math.sin(t * 0.4 + p.userData.ph) * 0.12, Math.cos(t * 0.22 + p.userData.ph) * 0.3));
         if (spread !== 1) { p.position.x = c.x + (p.position.x - c.x) * spread; p.position.z = c.z + (p.position.z - c.z) * spread; }
       }
-      // new floors pop in with a little overshoot
-      for (const [fl, p0] of b.pop) {
-        const p = p0 + dt / 0.6; b.pop.set(fl, p);
-        const e = p >= 1 ? 1 : 1 + 0.25 * Math.sin(p * Math.PI) * (1 - p) - (1 - p) * (1 - p);
-        fl.scale.set(1, Math.max(0.001, e), 1);
-        if (p >= 1) { fl.scale.set(1, 1, 1); b.pop.delete(fl); }
+      // a new level pops up out of the ground with a little bounce
+      if (b.pop) {
+        const p = (b.pop.t += dt / 0.7), n = b.pop.node;
+        const e = p >= 1 ? 1 : 1 - Math.pow(1 - p, 3) + Math.sin(p * Math.PI) * 0.18;
+        n.scale.set(0.6 + 0.4 * Math.min(1, e), Math.max(0.001, e), 0.6 + 0.4 * Math.min(1, e));
+        if (p >= 1) { n.scale.set(1, 1, 1); b.pop = null; reshadow(2); }
       }
     }
     // the raid's storm: gathers with how near it is, flickers while it strikes, scatters once held off
@@ -356,8 +611,9 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
     const out = {};
     for (const [id, b] of Object.entries(B)) {
       if (!b.node.visible) continue;
-      const top = id === "Arena" ? 2.6 : id === "Castle" ? (b.roof ? b.roof.position.y : 4) + 3.1 : (b.shown ? (b.roof ? b.roof.position.y : b.level) : 0) + 1.3;
-      b.node.localToWorld(v.set(0, top, 0));
+      const top = topOf(b);
+      v.set(top.x, top.y + (id === "Castle" ? 2.5 : 0.55), top.z);
+      root.localToWorld(v);
       out[id] = [v.x, v.y, v.z];
     }
     return out;

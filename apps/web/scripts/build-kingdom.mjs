@@ -1,168 +1,254 @@
-// Builds public/kingdom.glb: Bulbu's kingdom, assembled from the Kenney Fantasy Town Kit (CC0) and the Low Poly Arena
-// (De Alpe Game Art, free for commercial use). The app drives it through named nodes:
+// Builds public/kingdom.glb: Bulbu's kingdom, a floating island of hex tiles assembled from the KayKit Medieval
+// Hexagon Pack (CC0, Kay Lousberg). The app drives it through named nodes:
 //
 //   <Building>              one per goal kind: Castle, Library, Vault, Arena, Observatory, Workshop
-//   <Building>_F1.._F5      the floors, shown up to the building's level
-//   <Building>_Roof         sits on the top floor (the app moves it to the current level)
-//   <Building>_Scaffold     poles and planks round the next floor while it's being built
-//   <Building>_Plot         an empty plot, shown when there's no goal for that building yet
-//   Castle_Treasure         where the Goal Treasure floats (the app puts the orb or the goal's photo here)
-//   Observatory_Dome        where the glass dome sits; Vault_Coins where the coin piles go
-//   Decor                   trees, rocks, lanterns, stalls, the fountain and the path
+//   <Building>_L1.._L5      the building at each level; the app shows the one for the building's level (a new level
+//                           swaps the model, like an upgrade, and gets richer: walls, side towers, banners, props)
+//   <Building>_Scaffold     scaffolding and building materials beside it while the next level is being built
+//   <Building>_Plot         an empty plot (dirt, a pile of stone and timber, a flag) when there's no goal for it yet
+//   Castle_Treasure         where the Goal Treasure floats (the app lifts it above whichever level is showing)
+//   Vault_Coins             where the coin piles go
+//   Ground                  a node per hex cell (Tile_<q>_<r>): the app builds the lawn and the rock under it from these
+//   Decor                   forests, mountains, hills, rocks and props (Sway_* nodes sway in the wind)
+//   Clouds                  a few clouds drifting round the island
 //
-// Kenney pieces snap to a 1-unit grid. Walls are cell-centred with the wall on the +X face, so a cell's four sides
-// are the same piece turned 0/90/180/270° about Y. Floors stack at y = 0, 1, 2…
+// Cells are KayKit-sized hexes, 2 units across the flats (x) and 2.31 point to point (z), with the grass at y = 0.
+// They use axial coordinates (q, r) round the castle: x = 2q + r, z = CZ + r·√3.
+//
+// Source pieces live in assets/kingdom/kaykit (only the ones used, with the palette retinted: see CREDITS.md). With
+// KAYKIT=<path to the pack's gltf folder> any missing piece is copied in from the pack first.
 //
 //   node apps/web/scripts/build-kingdom.mjs
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { NodeIO, TextureInfo } from "@gltf-transform/core";
+import { NodeIO } from "@gltf-transform/core";
 import { KHRONOS_EXTENSIONS } from "@gltf-transform/extensions";
 import { dedup, mergeDocuments, prune, unpartition } from "@gltf-transform/functions";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const ASSETS = path.join(here, "../assets/kingdom"), OUT = path.join(here, "../public/kingdom.glb");
+const KIT = path.join(here, "../assets/kingdom/kaykit"), OUT = path.join(here, "../public/kingdom.glb");
 const io = new NodeIO().registerExtensions(KHRONOS_EXTENSIONS);
-const doc = await io.read(path.join(ASSETS, "kenney/planks.glb"));   // a Kenney piece as the base keeps the buffers simple
-const root = doc.getRoot();
-const scene = root.listScenes()[0];
+const base = await io.read(file("rock_single_A"));   // any piece as the base document keeps the buffers simple
+const root = base.getRoot(), scene = root.listScenes()[0];
 scene.listChildren().forEach(n => { scene.removeChild(n); n.dispose(); });
+const kingdom = base.createNode("Kingdom"); scene.addChild(kingdom);
 
-const kingdom = doc.createNode("Kingdom");
-scene.addChild(kingdom);
-
+// ---- pieces
+function file(name) {
+  const flat = path.basename(name), out = path.join(KIT, flat + ".gltf");
+  if (!fs.existsSync(out) && process.env.KAYKIT) {
+    const dirs = ["buildings/blue", "buildings/green", "buildings/red", "buildings/yellow", "buildings/neutral", "decoration/nature", "decoration/props", "tiles/base", "tiles/coast", "tiles/rivers", "tiles/roads"];
+    const dir = dirs.map(d => path.join(process.env.KAYKIT, d)).find(d => fs.existsSync(path.join(d, flat + ".gltf")));
+    if (!dir) throw new Error(`no KayKit piece called ${flat}`);
+    for (const ext of [".gltf", ".bin"]) fs.copyFileSync(path.join(dir, flat + ext), path.join(KIT, flat + ext));
+  }
+  if (!fs.existsSync(out)) throw new Error(`missing ${out} (set KAYKIT to the pack's gltf folder to copy it in)`);
+  return out;
+}
 const cache = new Map();
 const quatY = deg => { const a = (deg * Math.PI) / 360; return [0, Math.sin(a), 0, Math.cos(a)]; };
 const group = (parent, name, pos = [0, 0, 0], rotY = 0, scale = 1) => {
-  const n = doc.createNode(name).setTranslation(pos).setRotation(quatY(rotY)).setScale([scale, scale, scale]);
+  const n = base.createNode(name).setTranslation(pos).setRotation(quatY(rotY)).setScale([scale, scale, scale]);
   parent.addChild(n); return n;
 };
-/** Copy a piece (file name in the kit, or a full path) into the kingdom under `parent`. */
+/** Copy a KayKit piece into the kingdom under `parent`. */
 async function place(parent, piece, pos = [0, 0, 0], rotY = 0, scale = 1, name) {
-  const file = piece.endsWith(".glb") ? piece : path.join(ASSETS, "kenney", piece + ".glb");
-  if (!cache.has(file)) cache.set(file, await io.read(file));
-  const map = mergeDocuments(doc, cache.get(file));
-  const src = map.get(cache.get(file).getRoot().listScenes()[0]);
+  const f = file(piece);
+  if (!cache.has(f)) cache.set(f, await io.read(f));
+  const map = mergeDocuments(base, cache.get(f));
+  const src = map.get(cache.get(f).getRoot().listScenes()[0]);
   const s = Array.isArray(scale) ? scale : [scale, scale, scale];
-  const n = doc.createNode(name ?? path.basename(piece, ".glb")).setTranslation(pos).setRotation(quatY(rotY)).setScale(s);
+  const n = base.createNode(name ?? path.basename(piece)).setTranslation(pos).setRotation(quatY(rotY)).setScale(s);
   for (const c of src.listChildren()) { src.removeChild(c); n.addChild(c); }
   src.dispose();
   parent.addChild(n);
   return n;
 }
 
-// ---- building blocks
-const FACES = [["+x", 0], ["-z", 90], ["-x", 180], ["+z", 270]];
-const cells = (w, d) => { const out = []; for (let i = 0; i < w; i++) for (let j = 0; j < d; j++) out.push([i - (w - 1) / 2, j - (d - 1) / 2, i, j]); return out; };
-/** The walls round one floor of a w×d building. pick(face, i, j) chooses the piece for each outer side. */
-async function ring(parent, w, d, y, pick) {
-  for (const [x, z, i, j] of cells(w, d)) for (const [face, rot] of FACES) {
-    const outer = (face === "+x" && i === w - 1) || (face === "-x" && i === 0) || (face === "+z" && j === d - 1) || (face === "-z" && j === 0);
-    if (outer) await place(parent, pick(face, i, j), [x, y, z], rot);
+// ---- the hex grid
+const CZ = -5.6, S3 = Math.sqrt(3);
+const hx = (q, r) => [2 * q + r, CZ + r * S3];
+const dist = (q, r) => (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
+const cellAt = (x, z) => { const r = Math.round((z - CZ) / S3); return [Math.round((x - r) / 2), r]; };
+const key = (q, r) => `${q}_${r}`;
+// the island: everything within 4 of the castle, a little more in front (where Bulbu stands), a corner or two less
+const cells = new Map();
+for (let q = -6; q <= 6; q++) for (let r = -6; r <= 6; r++) if (dist(q, r) <= 4) cells.set(key(q, r), [q, r]);
+for (const [q, r] of [[-2, 5], [-3, 5], [-1, 5], [-5, 3], [4, -5], [5, -1]]) cells.set(key(q, r), [q, r]);
+for (const k of ["4_-4", "-4_0"]) cells.delete(k);
+
+// what stands on each cell
+const used = new Map();     // key -> what's there (a building, the path, decor)
+const claim = (x, z, what) => { const [q, r] = cellAt(x, z); used.set(key(q, r), what); };
+
+// ---- buildings: one model per level (KayKit's colours: blue, green, red, yellow)
+const B = (kind, color) => `building_${kind}_${color}`;
+const SPOTS = {
+  Castle: { x: 0, z: CZ, rot: 0, scale: 1.12 },
+  Library: { at: hx(-3, 2), rot: 25, scale: 1.25 },
+  Vault: { at: hx(1, 2), rot: -25, scale: 1.25 },
+  Arena: { at: hx(-2, -1), rot: 30, scale: 1.25 },
+  Observatory: { at: hx(3, -1), rot: -30, scale: 1.25 },
+  Workshop: { at: hx(0, -3), rot: 15, scale: 1.25 },
+};
+/** Each level: [piece, x, z, rotY, scale] parts, in the building's own space (+z faces Bulbu). */
+const LEVELS = {
+  Castle: [
+    [[B("tower_A", "yellow"), 0, 0, 0, 1.05], ["flag_yellow", 0.75, 0.55, 0, 1]],
+    [[B("barracks", "yellow"), 0, 0, 0, 1.05], ["flag_yellow", 1.0, 0.85, 0, 1]],
+    [[B("castle", "yellow"), 0, 0, 0, 1.12], ["flag_yellow", 1.15, 0.95, 0, 1], ["flag_yellow", -1.15, 0.95, 0, 1]],
+    [[B("castle", "yellow"), 0, 0, 0, 1.2], [B("tower_A", "yellow"), -1.75, 0.95, 0, 0.6], [B("tower_A", "yellow"), 1.75, 0.95, 0, 0.6],
+     ["flag_yellow", 1.3, 1.25, 0, 1], ["flag_yellow", -1.3, 1.25, 0, 1]],
+    [[B("castle", "yellow"), 0, 0, 0, 1.28], ["wall_straight", -1.8, 0.0, 90, 0.75], ["wall_straight", 1.8, 0.0, 90, 0.75],
+     [B("tower_A", "yellow"), -1.85, 1.05, 0, 0.64], [B("tower_A", "yellow"), 1.85, 1.05, 0, 0.64],
+     ["flag_yellow", -1.85, -0.95, 0, 1.2], ["flag_yellow", 1.85, -0.95, 0, 1.2]],
+  ],
+  Library: [
+    [[B("home_A", "blue"), 0, 0, 0, 1.05], ["crate_A_small", 0.55, 0.45, 20, 1]],
+    [[B("home_B", "blue"), 0, 0, 0, 1.05], ["barrel", 0.6, 0.5, 0, 1], ["crate_A_small", -0.55, 0.5, 10, 1]],
+    [[B("church", "blue"), 0, 0, 0, 1.05], ["barrel", 0.65, 0.6, 0, 1]],
+    [[B("church", "blue"), 0.1, -0.1, 0, 1.15], [B("home_A", "blue"), -0.75, 0.5, 30, 0.6], ["flag_blue", 0.75, 0.65, 0, 0.9]],
+    [[B("church", "blue"), 0.25, -0.15, 0, 1.2], [B("tower_A", "blue"), -0.75, 0.25, 0, 0.62], ["flag_blue", 0.85, 0.7, 0, 0.9], ["crate_A_big", -0.2, 0.85, 15, 0.9]],
+  ],
+  Vault: [
+    [[B("mine", "green"), 0, 0, 0, 0.85]],
+    [[B("mine", "green"), 0, -0.1, 0, 0.95], ["crate_B_small", 0.75, 0.55, 15, 1], ["barrel", -0.75, 0.6, 0, 1]],
+    [[B("mine", "green"), 0, -0.15, 0, 1.05], ["wheelbarrow", 0.75, 0.6, -30, 1], ["sack", -0.75, 0.65, 0, 1], ["crate_B_big", -0.9, 0.2, 10, 0.9]],
+    [[B("mine", "green"), -0.25, -0.2, 0, 1.05], [B("market", "green"), 0.65, 0.45, -20, 0.6], ["sack", -0.85, 0.7, 0, 1]],
+    [[B("mine", "green"), -0.25, -0.25, 0, 1.12], [B("market", "green"), 0.7, 0.45, -20, 0.68], ["wheelbarrow", -0.8, 0.75, 30, 1], ["flag_green", 0.95, -0.35, 0, 0.9]],
+  ],
+  Arena: [
+    [["tent", -0.25, 0, 20, 1.1], ["target", 0.55, 0.35, -20, 1.1], ["weaponrack", -0.6, 0.6, 30, 1]],
+    [[B("archeryrange", "red"), 0, 0, 0, 0.9]],
+    [[B("archeryrange", "red"), 0, 0, 0, 1.02], ["weaponrack", -0.85, 0.6, 30, 1]],
+    [[B("archeryrange", "red"), 0.1, 0, 0, 1.1], ["target", -0.9, 0.55, 20, 1], ["weaponrack", 0.95, 0.65, -20, 1], ["flag_red", -0.9, -0.5, 0, 0.9]],
+    [[B("barracks", "red"), 0.1, -0.1, 0, 1.0], ["target", -1.0, 0.65, 25, 1], ["target", -1.15, 0.05, 40, 1], ["weaponrack", 0.95, 0.75, -20, 1], ["flag_red", 1.0, -0.55, 0, 0.9]],
+  ],
+  Observatory: [
+    [[B("tower_base", "blue"), 0, 0, 0, 1.0], ["crate_A_small", 0.55, 0.45, 20, 1]],
+    [[B("tower_A", "blue"), 0, 0, 0, 0.85]],
+    [[B("tower_A", "blue"), 0, 0, 0, 1.0], ["barrel", 0.6, 0.5, 0, 1]],
+    [[B("tower_B", "blue"), 0, 0, 0, 1.05], [B("home_A", "blue"), 0.75, 0.45, -30, 0.55]],
+    [[B("tower_B", "blue"), -0.1, -0.1, 0, 1.15], [B("home_A", "blue"), 0.8, 0.45, -30, 0.58], ["flag_blue", -0.8, 0.6, 0, 0.9]],
+  ],
+  Workshop: [
+    [[B("blacksmith", "yellow"), 0, 0, 0, 0.85]],
+    [[B("blacksmith", "yellow"), 0, 0, 0, 1.0], ["resource_lumber", 0.75, 0.55, 20, 0.9]],
+    [[B("lumbermill", "yellow"), 0, 0, 0, 1.0], ["resource_lumber", 0.8, 0.55, 20, 0.9], ["resource_stone", -0.8, 0.55, 0, 0.9]],
+    [[B("lumbermill", "yellow"), -0.35, -0.1, 0, 1.0], [B("blacksmith", "yellow"), 0.65, 0.4, -25, 0.62]],
+    [[B("windmill", "yellow"), -0.35, -0.2, 0, 1.15], [B("blacksmith", "yellow"), 0.7, 0.4, -25, 0.62], ["resource_lumber", -0.85, 0.7, 30, 0.9]],
+  ],
+};
+const PLOT_FLAG = { Castle: "flag_yellow", Library: "flag_blue", Vault: "flag_green", Arena: "flag_red", Observatory: "flag_blue", Workshop: "flag_yellow" };
+
+for (const [id, spot] of Object.entries(SPOTS)) {
+  const [x, z] = spot.at ?? [spot.x, spot.z];
+  const b = group(kingdom, id, [x, 0, z], spot.rot, spot.scale);
+  claim(x, z, id);
+  for (const [i, parts] of LEVELS[id].entries()) {
+    const lv = group(b, `${id}_L${i + 1}`);
+    for (const [piece, px, pz, pr, ps] of parts) await place(lv, piece, [px, 0, pz], pr, ps);
   }
+  // being built: scaffolding to one side, a pile of timber and stone to the other
+  const sc = group(b, `${id}_Scaffold`);
+  await place(sc, "building_scaffolding", [0.95, 0, 0.55], -20, 0.55);
+  await place(sc, "resource_lumber", [-0.95, 0, 0.75], 25, 0.85);
+  await place(sc, "resource_stone", [-0.55, 0, 1.05], 0, 0.8);
+  // no goal yet: a dirt plot with a pile of materials and a flag
+  const plot = group(b, `${id}_Plot`);
+  await place(plot, "building_dirt", [0, 0.005, 0], 0, 0.95);
+  await place(plot, "building_stage_A", [-0.15, 0, -0.1], 0, 0.95);
+  await place(plot, PLOT_FLAG[id], [0.55, 0, 0.45], 0, 1);
 }
-/** An empty plot: a low fence round a w×d square, open at the front, with a flag in the middle. */
-async function fencedPlot(parent, w, d) {
-  for (const [x, z, i, j] of cells(w, d)) for (const [face, rot] of FACES) {
-    const outer = (face === "+x" && i === w - 1) || (face === "-x" && i === 0) || (face === "-z" && j === 0);
-    if (outer) await place(parent, "fence", [x, 0, z], rot, [1, 0.8, 1]);
-  }
-  await place(parent, "banner-green", [0, 0.1, 0], 270, [1, 0.8, 1]);
-}
-/** Floors F1..Fn, a roof, scaffolding for the next floor and an empty plot. */
-async function building(name, { at, rot = 0, scale = 1, w = 1, d = 1, floors, pick, roof }) {
-  const b = group(kingdom, name, at, rot, scale);
-  for (let f = 1; f <= floors; f++) await ring(group(b, `${name}_F${f}`, [0, f - 1, 0]), w, d, 0, (face, i, j) => pick(f, face, i, j));
-  if (roof) await roof(group(b, `${name}_Roof`, [0, floors, 0]));
-  // scaffolding: poles on every outer side, a planked deck on top, a touch larger than the walls
-  const sc = group(b, `${name}_Scaffold`, [0, floors, 0]);
-  await ring(group(sc, `${name}_ScaffoldPoles`, [0, 0, 0], 0, 1.12), w, d, 0, () => "poles");
-  for (const [x, z] of cells(w, d)) await place(sc, "planks", [x * 1.12, 1, z * 1.12], 0, 1.12);
-  await fencedPlot(group(b, `${name}_Plot`), Math.max(w, 2), Math.max(d, 2));
-  return b;
-}
+group(kingdom.listChildren().find(n => n.getName() === "Castle"), "Castle_Treasure", [0, 5.2, 0]);
+group(kingdom.listChildren().find(n => n.getName() === "Vault"), "Vault_Coins", [0.05, 0, 0.95]);
+// the castle's walls reach into the cells beside it, and the path runs from Bulbu to the gate: keep those clear
+for (const x of [-2, 2]) claim(x, CZ, "Castle");
+for (const [q, r] of [[0, 4], [0, 3], [-1, 3], [0, 2], [-1, 2], [0, 1], [-1, 1], [-2, 5], [-1, 5]]) used.set(key(q, r), "path");
 
-// ---- the castle: the user's main goal. A two-cell keep with corner towers; the Goal Treasure floats above it.
-const castle = await building("Castle", {
-  at: [0, 0, -5.6], w: 2, d: 2, floors: 3, scale: 1.05,
-  pick: (f, face, i) => f === 1 && face === "+z" ? (i === 0 ? "wall-doorway-round" : "wall-window-stone") : f === 3 ? "wall-window-stone" : "wall",
-  roof: async r => { await place(r, "roof-high-point", [0, 0, 0], 0, [2.0, 1.25, 2.0]); },
-});
-for (const [x, z] of [[-1.35, -1.35], [1.35, -1.35], [-1.35, 1.35], [1.35, 1.35]]) {
-  const t = group(castle, "Castle_Tower", [x, 0, z]);
-  for (let f = 0; f < 3; f++) await place(t, "wall-rounded", [0, f, 0], 0, 0.7);
-  await place(t, "roof-point", [0, 2.1, 0], 0, 0.8);
-}
-await place(castle, "banner-red", [0, 1.1, 0.62], 270, 1, "Castle_Banner");
-group(castle, "Castle_Treasure", [0, 5.2, 0]);
+// ---- dirt paths: from Bulbu to the castle gate, and on to each building's door (the app lays them as ribbons)
+const PATHS = [
+  [[0, 1.6], [0.3, 0.2], [0.05, -1.4], [-0.2, -2.8], [0, -4.0]],
+  [[0.2, -0.4], [-1.2, -0.2], [-2.4, -0.75], [-3.3, -1.25]],
+  [[0.1, -1.6], [1.4, -1.45], [2.5, -1.2], [3.3, -1.3]],
+  [[-0.15, -2.9], [-1.5, -3.25], [-2.9, -3.7], [-3.75, -5.0], [-4.3, -6.1]],
+  [[0, -3.6], [1.6, -3.45], [3.0, -4.0], [3.85, -5.1], [4.3, -6.1]],
+  [[-3.6, -4.7], [-3.4, -6.4], [-2.6, -7.9], [-2.6, -9.3]],
+];
+const paths = group(kingdom, "Paths");
+PATHS.forEach((pts, i) => { const p = group(paths, `Path_${i}`); pts.forEach(([x, z], j) => group(p, `Path_${i}_${j}`, [x, 0, z])); });
+const segDist = (x, z, [ax, az], [bx, bz]) => { const dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz))); return Math.hypot(x - ax - t * dx, z - az - t * dz); };
+const nearPath = (x, z, d) => PATHS.some(p => p.some((a, i) => i && segDist(x, z, p[i - 1], a) < d)) || nearPond(x, z, d * 0.6);
 
-// ---- Library Tower (coding / DSA): a tall, narrow tower of glass-windowed floors
-await building("Library", {
-  at: [-3.7, 0, -2.6], rot: 20, scale: 1.15, floors: 5,
-  pick: (f, face) => f === 1 && face === "+z" ? "wall-door" : f % 2 ? "wall-window-glass" : "wall-window-round",
-  roof: async r => { await place(r, "roof-high-point", [0, 0, 0], 0, 1.05); },
-});
+// ---- a pond on the lawn, front left (the app lays the water; lilies and reeds come from the kit)
+const POND = { x: -2.9, z: 1.0, r: 0.95 };
+group(kingdom, "Pond", [POND.x, 0, POND.z]).setExtras({ r: POND.r });
+used.set(key(...cellAt(POND.x, POND.z)), "pond");
+const nearPond = (x, z, d) => Math.hypot(x - POND.x, z - POND.z) < POND.r + d;
 
-// ---- Vault (savings): a squat stone strongroom with a flat roof and coin piles at the door
-await building("Vault", {
-  at: [3.7, 0, -2.6], rot: -20, scale: 1.1, w: 2, d: 1, floors: 3,
-  pick: (f, face, i) => f === 1 && face === "+z" && i === 0 ? "wall-door" : "wall-block",
-  roof: async r => { for (const x of [-0.5, 0.5]) await place(r, "roof-flat", [x, 0, 0]); await place(r, "chimney", [0.5, 0.1, 0]); },
-});
-group(kingdom.listChildren().find(n => n.getName() === "Vault"), "Vault_Coins", [0.5, 0, 0.95]);
-
-// ---- Observatory (reading / learning): round windows, and a glass dome the app puts on top
-await building("Observatory", {
-  at: [4.7, 0, -7.4], rot: -35, scale: 1.1, floors: 3,
-  pick: (f, face) => f === 1 && face === "+z" ? "wall-doorway-square" : "wall-window-round",
-  roof: async r => { await place(r, "roof-flat", [0, 0, 0], 0, 1.1); group(r, "Observatory_Dome", [0, 0.13, 0]); },
-});
-
-// ---- Workshop (any other goal): a timber house
-await building("Workshop", {
-  at: [-1.2, 0, -9.4], rot: 10, scale: 1.05, floors: 3,
-  pick: (f, face) => f === 1 && face === "+z" ? "wall-wood-door" : "wall-wood-window-shutters",
-  roof: async r => { await place(r, "roof-high-point", [0, 0, 0], 0, 1.05); },
-});
-
-// ---- Arena (fitness): the Low Poly Arena, scaled to the grid (it's ~50 units wide); its levels are banners round
-// the rim, so its floors are empty groups the app counts
-const arena = group(kingdom, "Arena", [-4.9, 0, -7.6], 25);
-await place(arena, path.join(ASSETS, "arena/LowPolyArena.glb"), [0, 0.07, 0], 0, 0.075, "Arena_Model");
-for (let f = 1; f <= 5; f++) {
-  const fl = group(arena, `Arena_F${f}`);
-  const a = (f / 5) * Math.PI * 1.6 - Math.PI * 0.8;
-  await place(fl, f % 2 ? "banner-red" : "banner-green", [Math.sin(a) * 1.75, 1.0, Math.cos(a) * 1.75], (a * 180) / Math.PI + 90, 0.9);
-}
-const asc = group(arena, "Arena_Scaffold", [0, 1.45, 0]);
-for (const [x, z, r] of [[1.6, 0.6, 0], [-1.6, 0.6, 180], [0, 1.8, 270]]) await place(asc, "poles", [x, 0, z], r, [1, 0.8, 1]);
-await fencedPlot(group(arena, "Arena_Plot"), 3, 3);
-
-// ---- decor: the path from Bulbu to the castle, trees round the rim, rocks, lanterns, stalls and the fountain
+// ---- decor
 const decor = group(kingdom, "Decor");
-for (const z of [-1.2, -2.2, -3.2]) await place(decor, "road", [0, 0.001, z]);
-for (const [x, z] of [[-1.5, 0.6], [1.5, 0.6], [-1.3, -3.6], [1.3, -3.6]]) await place(decor, "lantern", [x, 0, z]);
-await place(decor, "fountain-round", [-2.0, 0, 0.9], 0, 0.75);
-await place(decor, "stall-red", [2.3, 0, -0.1], -30);
-await place(decor, "stall-green", [5.4, 0, -4.9], -60);
-await place(decor, "cart", [-2.4, 0, -4.9], 40);
-const trees = [[-6.6, -1.0, "tree-high-round"], [-7.0, -4.6, "tree"], [-6.0, -10.0, "tree-high"], [-3.2, -11.0, "tree-crooked"],
-  [2.6, -11.2, "tree-high-round"], [6.2, -10.0, "tree"], [7.2, -4.4, "tree-high-crooked"], [6.6, -0.6, "tree-high"],
-  [-5.0, 1.4, "tree"], [5.0, 1.6, "tree-high-round"], [2.4, -7.4, "tree"], [-2.4, -7.0, "tree-high"]];
-for (const [x, z, t] of trees) await place(decor, t, [x, 0, z], (x * 37) % 360, 1.1);
-for (const [x, z, r] of [[-6.2, -6.8, "rock-large"], [6.9, -7.6, "rock-wide"], [-3.8, 1.5, "rock-small"], [4.0, -0.4, "rock-small"], [0.8, -11.4, "rock-large"]])
-  await place(decor, r, [x, 0, z], (z * 53) % 360, 0.9);
-for (const x of [-0.75, 0.75]) await place(decor, "hedge", [x, 0, -4.1], 0);
+let sway = 0;
+const tree = (piece, pos, rot, s) => place(decor, piece, pos, rot, s, `Sway_${piece}_${sway++}`);
+const r01 = (() => { let s = 99; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; })();
+// the far edge: mountains and wooded hills behind the castle
+const BACK = [[-1, -3, "mountain_A_grass_trees", 1.25], [0, -4, "mountain_B_grass_trees", 1.35], [1, -4, "mountain_C_grass_trees", 1.2],
+  [2, -4, "mountain_A_grass_trees", 1.15], [4, -5, "hills_B_trees", 1.0], [-1, -4 + 1, null, 0], [3, -4, "hills_C_trees", 1.05],
+  [-2, -2, "hills_A_trees", 1.0], [1, -3, "hills_B_trees", 0.9]];
+for (const [q, r, piece, s] of BACK) {
+  if (!piece || !cells.has(key(q, r)) || used.has(key(q, r))) continue;
+  const [x, z] = hx(q, r); await place(decor, piece, [x, 0, z], r01() * 360, s); used.set(key(q, r), "decor");
+}
+// forests round the rim, single trees and rocks further in, and a few props
+const outer = [...cells.values()].filter(([q, r]) => !used.has(key(q, r)) && (dist(q, r) >= 4 || r >= 5 || (q === 5 && r === -1)));
+const FOREST = ["trees_B_large", "trees_A_large", "trees_B_medium", "trees_A_medium"];
+for (const [q, r] of outer) {
+  const [x, z] = hx(q, r);
+  if (z > -0.5) {                                                         // the front edge, near Bulbu: low and open
+    if (Math.abs(x) < 2.5 || nearPond(x, z, 1.2)) { used.set(key(q, r), "open"); continue; }
+    await tree(r01() < 0.5 ? "tree_single_B" : "tree_single_A", [x + (r01() - 0.5) * 0.6, 0, z + (r01() - 0.5) * 0.4], r01() * 360, 1.0 + r01() * 0.25);
+    await place(decor, "rock_single_" + "ABCDE"[Math.floor(r01() * 5)], [x - 0.5, 0, z + 0.3], r01() * 360, 1.6);
+  } else if (!nearPath(x, z, 1.5)) await tree(FOREST[Math.floor(r01() * FOREST.length)], [x, 0, z], Math.floor(r01() * 6) * 60, 0.95 + r01() * 0.15);
+  used.set(key(q, r), "decor");
+}
+// inner cells: a scatter of single trees, rocks and hills, leaving most of the grass open
+for (const [q, r] of cells.values()) {
+  if (used.has(key(q, r))) continue;
+  const [x, z] = hx(q, r), roll = r01();
+  if (z > -1.0 && Math.abs(x) < 3) continue;                              // Bulbu's lawn
+  if (roll < 0.45) {
+    for (let i = 0, n = 1 + Math.floor(r01() * 2); i < n; i++) {
+      const tx = x + (r01() - 0.5) * 1.2, tz = z + (r01() - 0.5) * 1.2;
+      if (!nearPath(tx, tz, 0.75)) await tree(r01() < 0.5 ? "tree_single_A" : "tree_single_B", [tx, 0, tz], r01() * 360, 0.95 + r01() * 0.3);
+    }
+  } else if (roll < 0.75) { const rx = x + (r01() - 0.5), rz = z + (r01() - 0.5); if (!nearPath(rx, rz, 0.6)) await place(decor, "rock_single_" + "ABCDE"[Math.floor(r01() * 5)], [rx, 0, rz], r01() * 360, 1.8); }
+}
+// lilies on the pond, reeds at its edge
+for (const [a, d, piece, s] of [[0.4, 0.45, "waterlily_A", 1.1], [2.3, 0.35, "waterlily_B", 1.1], [4.2, 0.55, "waterlily_A", 0.9],
+  [1.2, 1.0, "waterplant_B", 1.7], [3.4, 1.02, "waterplant_A", 1.6], [5.3, 0.98, "waterplant_C", 1.7], [2.5, 1.05, "waterplant_C", 1.4]])
+  await (piece.startsWith("waterplant") ? tree : (pc, pos, rot, sc) => place(decor, pc, pos, rot, sc))(piece, [POND.x + Math.cos(a) * POND.r * d, 0.02, POND.z + Math.sin(a) * POND.r * d], a * 57, s);
+// little touches round the path
+await place(decor, "barrel", [1.0, 0, -1.6], 0, 1);
+await place(decor, "crate_A_big", [-1.15, 0, -2.2], 20, 1);
+await place(decor, "bucket_water", [1.25, 0, -2.0], 0, 1);
 
-// ---- the arena's pixel-art palette must not be filtered (it's 3×4 pixels)
-for (const m of root.listMaterials()) {
-  const info = m.getBaseColorTextureInfo(), tex = m.getBaseColorTexture();
-  if (info && tex && (tex.getSize()?.[0] ?? 99) <= 8) info.setMagFilter(TextureInfo.MagFilter.NEAREST).setMinFilter(TextureInfo.MinFilter.NEAREST);
+// ---- the ground: one (empty) node per cell; the app lays a seamless lawn over them and the rock underneath
+const ground = group(kingdom, "Ground");
+for (const [q, r] of cells.values()) {
+  const [x, z] = hx(q, r);
+  group(ground, `Tile_${q}_${r}`, [x, 0, z]);
 }
 
-await doc.transform(unpartition(), dedup(), prune({ keepLeaves: true, keepAttributes: true }));
-await io.write(OUT, doc);
+// ---- clouds drifting round the island
+const clouds = group(kingdom, "Clouds");
+for (const [x, y, z, s, piece] of [[-12.5, -1.5, -3, 1.2, "cloud_big"], [12.8, -2.6, -6.5, 1.0, "cloud_big"], [-10.5, -4.2, -10.5, 0.8, "cloud_small"],
+  [10.5, 1.2, -13.5, 0.9, "cloud_small"], [-7.5, 3.5, -15, 1.1, "cloud_big"], [8.5, -4.5, 1.5, 0.8, "cloud_small"]])
+  await place(clouds, piece, [x, y, z], r01() * 360, s);
+
+await base.transform(unpartition(), dedup(), prune({ keepLeaves: true, keepAttributes: true }));
+await io.write(OUT, base);
 let tris = 0;
 for (const n of root.listNodes()) { const m = n.getMesh(); if (m) for (const p of m.listPrimitives()) tris += (p.getIndices()?.getCount() ?? p.getAttribute("POSITION").getCount()) / 3; }
-if (process.env.LIST_PIECES) console.log([...cache.keys()].map(f => path.relative(ASSETS, f)).sort().join("\n"));
-console.log(`kingdom.glb: ${root.listNodes().length} nodes, ${root.listMeshes().length} meshes, ~${Math.round(tris)} triangles (instanced pieces counted once per node)`);
+if (process.env.LIST_PIECES) console.log([...cache.keys()].map(f => path.basename(f, ".gltf")).sort().join("\n"));
+console.log(`kingdom.glb: ${cells.size} tiles, ${root.listNodes().length} nodes, ${root.listMeshes().length} meshes, ~${Math.round(tris)} triangles placed (every level of every building counted)`);

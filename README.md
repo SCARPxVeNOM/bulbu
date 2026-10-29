@@ -91,7 +91,7 @@ apps/web          The three.js engine and kingdom scene the phone app runs (src/
 
 **Memory.** Exact numbers live in the history of moves; meaning (facts, patterns, promises) lives in *What Bulbu remembers*, where you can see, correct or delete anything.
 
-**The kingdom scene.** `apps/web/scripts/build-kingdom.mjs` assembles `kingdom.glb` from Kenney's Fantasy Town Kit (CC0) and the Low Poly Arena (free for commercial use): named floors, roofs, scaffolding and plots that the app drives from the engine. Credits in `apps/web/assets/kingdom/CREDITS.md`.
+**The kingdom scene.** `apps/web/scripts/build-kingdom.mjs` assembles `kingdom.glb` from the KayKit Medieval Hexagon Pack (CC0): a hex-cell floating island with a model per building level (a level-up swaps it, like an upgrade), scaffolding and plots that the app drives from the engine. `src/bulbu/kingdom.js` adds the seamless lawn, the basalt rock underneath, dirt paths, a pond, grass and trees that sway in the wind, and sunlight with soft shadows (drawn only when something changes). Credits in `apps/web/assets/kingdom/CREDITS.md`.
 
 ## Not built yet
 
