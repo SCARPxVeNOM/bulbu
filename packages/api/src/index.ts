@@ -11,7 +11,12 @@ export type {
 
 /** "sweater" and "hoodie" are the built-in outfits; the eight Bulbus are OutfitIds; null is no outfit. */
 export type OutfitChoice = "sweater" | "hoodie" | OutfitId | null;
-export interface User { id: string; name: string; demo?: boolean; outfit: OutfitChoice; theme: string; gear?: string | null }
+export interface User {
+  id: string; name: string; demo?: boolean; outfit: OutfitChoice; theme: string; gear?: string | null;
+  /** the user's gym (the one place Bulbu keeps) and the gym session in progress */
+  gym?: { name: string; lat: number; lng: number; radius: number; setAt: string };
+  gymVisit?: { start: string; metres: number };
+}
 export interface Fact { id: string; kind: "fact" | "pattern" | "promise" | "win"; text: string; detail?: string; confidence: number; source: "stated" | "inferred"; createdAt: string; updatedAt: string; checkAt?: string; done?: boolean }
 export interface Nudge { id: string; kind: string; at: string; text: string; emote: Emote; action: { label: string; to: string } }
 export interface GoalView extends Goal { subtitle: string; forecast: Forecast; swap: Swap; task: { label: string; done: boolean }; series: { day: string; percent: number }[] }
@@ -109,6 +114,11 @@ export interface Visit {
   id: string; name: string; outfit: string | null; level: number; week: WeekPlay;
   kingdom: { buildings: { id: BuildingId; name: string; goalTitle: string; level: number; building: boolean; eta: string | null; glow: number; fog: number }[]; plots: BuildingId[] };
 }
+/** A location fix from the phone (only sent when checking in or out at your gym) */
+export interface Fix { lat: number; lng: number; accuracy?: number; mocked?: boolean }
+export interface GymSpot { name: string; lat: number; lng: number; radius: number; setAt: string }
+/** A photo just taken with Bulbu's camera, with the time from its own EXIF data */
+export interface LivePhoto { image: string; takenAt: number | null }
 export interface Hand { cards: Card[]; played: number; via: "spark" | "engine" }
 /** "Ask before you choose": what a choice would do to each building, and one swap. Nothing was stored. */
 export interface ChoicePreview {
@@ -223,8 +233,13 @@ export function createBulbuClient(o: ClientOptions = {}) {
     building: (id: BuildingId) => call<BuildingReport>("GET", `/kingdom/${q(id)}`),
     /** today's hand of cards (Muse Spark deals three a day) */
     hand: () => call<Hand>("GET", "/cards"),
-    /** play a card: you did it in real life; returns what it moved, like a log */
-    playCard: (id: string) => call<LogResult>("POST", "/cards/play", { id }),
+    /** play a card: you did it in real life; returns what it moved, like a log. A workout card can carry a live photo. */
+    playCard: (id: string, photo?: LivePhoto) => call<LogResult>("POST", "/cards/play", { id, photo }),
+    // proving a workout: your gym (set once; check in, check out) or a live photo
+    setGym: (f: Fix & { name?: string }) => call<{ gym: GymSpot }>("POST", "/gym", f),
+    gymCheckin: (f: Fix) => call<{ visit: { start: string; metres: number }; gym: GymSpot }>("POST", "/gym/checkin", f),
+    gymCheckout: (f: Fix) => call<LogResult & { verified: "location"; minutes: number; card: string | null }>("POST", "/gym/checkout", f),
+    gymPhoto: (p: LivePhoto & { minutes?: number }) => call<LogResult & { verified: "photo" | null; note: string | null }>("POST", "/gym/photo", p),
     /** a what-if across the kingdom, with every stop on its dial worked out */
     kingdomWhatIf: (text: string) => call<KingdomWhatIfView | { error: string }>("POST", "/kingdom/whatif", { text }),
     // clans

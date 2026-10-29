@@ -13,3 +13,4 @@ export * from "./cards.ts";
 export * from "./raids.ts";
 export * from "./clans.ts";
 export * from "./seasons.ts";
+export * from "./proof.ts";

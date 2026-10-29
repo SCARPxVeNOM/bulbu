@@ -34,6 +34,15 @@ You tell Bulbu what happened by talking to it, showing it a screenshot (screen t
 
 Demo users: **Aryan** (DSA student losing evenings to Instagram) and **Priya** (young earner saving for an iPhone 17), each with about 30 days of history so the forecasts, patterns and raids are live. Both are in the demo clan **NODE · BMSITM** with three fictional clanmates, at war with the fictional **Night Owls · Demo College**. `npm run seed` resets them.
 
+## Fair play: proving a workout
+
+Most moves are told to Bulbu, and on your own kingdom that's fine: faking only fools yourself. Clan wars are shared, so workouts can be proven:
+
+- **Your gym.** Set it once by standing in it (Bulbu keeps only that spot, never where you go). Check in when you get there and out when you leave: both locations have to be at the gym, 25 minutes or more apart, and a simulated location (a mock-location app) never counts. It becomes a verified workout and plays your Arena card.
+- **A live photo.** Taken with Bulbu's camera (not the gallery), its own timestamp from the last 10 minutes, never used before, and Muse Spark has to see a workout in it.
+
+In clan wars a proven workout counts in full and a reported one counts half. Android's usage access is device-reported already; linking LeetCode / Codeforces and Health Connect are next.
+
 ## Run it
 
 Node 22+ (uses the built-in `node:sqlite`).

@@ -27,6 +27,10 @@ export interface User {
   /** the clan this user builds with */
   clanId?: string | null;
   clanJoinedAt?: string;
+  /** the user's gym (the one spot Bulbu keeps), the gym session in progress, and live photos already used */
+  gym?: { name: string; lat: number; lng: number; radius: number; setAt: string };
+  gymVisit?: { start: string; metres: number };
+  photoHashes?: string[];
   /** when the user last saw Light their clanmates sent */
   giftsSeenAt?: string;
   /** "sweater" | "hoodie" (built-in), one of the eight Bulbu outfit ids, or null */

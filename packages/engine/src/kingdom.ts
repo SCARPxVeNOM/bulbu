@@ -103,6 +103,8 @@ export interface BuildingMove {
   days: number;
   equivalent: string;
   breakdown: Step[];
+  /** proven at the gym or by a live photo */
+  proof?: "location" | "photo";
 }
 
 export interface BuildingReport extends BuildingState {
@@ -139,7 +141,7 @@ export function buildingReport(id: BuildingId, goals: Goal[], history: Activity[
   const today = dayKey(now);
   const moves: BuildingMove[] = history.filter(a => dayKey(a.at) === today && +new Date(a.at) <= +now)
     .flatMap(a => impactsOf(goals, history, a, now).filter(i => i.goalId === goal.id)
-      .map(i => ({ activityId: a.id, label: a.label, at: a.at, days: i.days, equivalent: i.equivalent, breakdown: i.breakdown })))
+      .map(i => ({ activityId: a.id, label: a.label, at: a.at, days: i.days, equivalent: i.equivalent, breakdown: i.breakdown, ...(a.proof && { proof: a.proof }) })))
     .sort((x, y) => Math.abs(y.days) - Math.abs(x.days));
   const todayShift = moves.reduce((s, m) => s + m.days, 0), slowed = moves.reduce((s, m) => s + Math.max(0, m.days), 0);
   const etaBefore = f.done ? f.eta : dayKey(addDays(startOfDay(now), Math.ceil(Math.max(0, f.daysLeft - todayShift))).toISOString());

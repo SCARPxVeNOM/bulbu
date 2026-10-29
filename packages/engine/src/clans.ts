@@ -35,12 +35,19 @@ export function weekPlay(goals: Goal[], history: Activity[], save: WorldSave, no
   const from = +week, to = Math.min(+now, +addDays(week, 7));
   const acts = history.filter(a => +new Date(a.at) >= from && +new Date(a.at) < to);
   let daysSooner = 0;
-  for (const a of acts) for (const i of impactsOf(goals, history, a, now)) if (i.days < 0) daysSooner -= i.days;
+  for (const a of acts) for (const i of impactsOf(goals, history, a, now)) if (i.days < 0) daysSooner -= i.days * trust(a);
   const raidsHeld = Object.values(save.raids ?? {}).filter(r => +new Date(r.at) >= from && +new Date(r.at) < to).length;
   const cardsPlayed = acts.filter(a => a.source === "card").length;
   daysSooner = Math.round(daysSooner * 10) / 10;
   const points = Math.round(daysSooner * WAR_POINTS.perDaySooner + raidsHeld * WAR_POINTS.perRaid + cardsPlayed * WAR_POINTS.perCard);
   return { daysSooner, raidsHeld, cardsPlayed, points };
+}
+
+/** How much a move counts in a clan war: workouts count in full when proven (at the gym, or a live photo), half when
+ *  they're only reported. Everything else counts in full. */
+export function trust(a: Activity): number {
+  if (a.category !== "workout") return 1;
+  return a.proof || a.source === "device" ? 1 : 0.5;
 }
 
 export type WarResult = "won" | "lost" | "draw";

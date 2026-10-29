@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
-import { api, BulbuError, type BulbuDirective, type Hand, type KingdomMoment, type LogResult, type Snapshot, type Swap } from "./api";
+import { api, BulbuError, type BulbuDirective, type Hand, type KingdomMoment, type LivePhoto, type LogResult, type Snapshot, type Swap } from "./api";
 
 /** What a new move did to the kingdom, played on Home: the fog rolls in or clears, the finish date slips or pulls back. */
 export interface Moment { key: number; items: KingdomMoment[]; swap: Swap | null }
@@ -27,7 +27,7 @@ interface Store {
   /** today's hand of cards */
   hand: Hand | null;
   /** play a card (you did it): the move goes in, the kingdom plays the moment, and Bulbu celebrates */
-  playCard(id: string): Promise<LogResult | null>;
+  playCard(id: string, photo?: LivePhoto): Promise<LogResult | null>;
   toast(text: string): void;
   toastText: string | null;
 }
@@ -78,9 +78,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     else if (r?.worldLevel && r.worldLevel.after > r.worldLevel.before) toast(`Level ${r.worldLevel.after}! Bulbu levelled up.`);
   }, [toast]);
 
-  const playCard = useCallback(async (id: string) => {
+  const playCard = useCallback(async (id: string, photo?: LivePhoto) => {
     try {
-      const r = await api.playCard(id);
+      const r = await api.playCard(id, photo);
       recordLog(r); setReaction(r.bulbu);
       setHand(h => h && { ...h, cards: h.cards.filter(c => c.id !== id), played: h.played + 1 });
       void refresh();

@@ -8,6 +8,8 @@ import type { Card } from "@bulbu/api";
 import { Sheet, tap } from "@/components/ui";
 import { C, F, T } from "@/theme";
 import { BUILDING_ART } from "./buildings";
+import { livePhoto } from "@/lib/proof";
+import type { LivePhoto } from "@bulbu/api";
 
 /** The hand on the kingdom: a little fan of cards, like a card game's. */
 export function HandButton({ cards, onPress }: { cards: Card[]; onPress: () => void }) {
@@ -39,16 +41,23 @@ export function HandButton({ cards, onPress }: { cards: Card[]; onPress: () => v
 }
 
 /** The hand, opened: the cards side by side. `focus` puts a building's card first (from "Clear it"). */
-export function HandSheet({ open, onClose, cards, focus, onPlay }: { open: boolean; onClose: () => void; cards: Card[]; focus?: string | null; onPlay: (c: Card) => Promise<void> }) {
+export function HandSheet({ open, onClose, cards, focus, onPlay, onError }: { open: boolean; onClose: () => void; cards: Card[]; focus?: string | null; onPlay: (c: Card, photo?: LivePhoto) => Promise<void>; onError?: (m: string) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const shown = focus ? [...cards.filter(c => c.building === focus), ...cards.filter(c => c.building !== focus)] : cards;
-  const play = async (c: Card) => { setBusy(c.id); try { await onPlay(c); } finally { setBusy(null); } };
+  const play = async (c: Card, withPhoto = false) => {
+    setBusy(c.id);
+    try {
+      const photo = withPhoto ? await livePhoto() : undefined;
+      if (withPhoto && !photo) return;
+      await onPlay(c, photo ?? undefined);
+    } catch (e) { onError?.((e as Error).message); } finally { setBusy(null); }
+  };
   return (
     <Sheet open={open} onClose={onClose} title="Today's cards">
       <Text style={[T.small, { marginTop: -4, marginBottom: 12 }]}>Do one in real life, then play it here. It clears the Dim and brings its building closer.</Text>
       {shown.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={232} decelerationRate="fast" contentContainerStyle={{ gap: 12, paddingBottom: 6, paddingRight: 8 }}>
-          {shown.map(c => <CardView key={c.id} c={c} busy={busy === c.id} disabled={!!busy} onPlay={() => play(c)} />)}
+          {shown.map(c => <CardView key={c.id} c={c} busy={busy === c.id} disabled={!!busy} onPlay={() => play(c)} onProve={c.building === "Arena" ? () => play(c, true) : undefined} />)}
         </ScrollView>
       ) : (
         <View style={{ alignItems: "center", gap: 6, paddingVertical: 24 }}>
@@ -61,7 +70,7 @@ export function HandSheet({ open, onClose, cards, focus, onPlay }: { open: boole
   );
 }
 
-function CardView({ c, busy, disabled, onPlay }: { c: Card; busy: boolean; disabled: boolean; onPlay: () => void }) {
+function CardView({ c, busy, disabled, onPlay, onProve }: { c: Card; busy: boolean; disabled: boolean; onPlay: () => void; onProve?: () => void }) {
   const art = BUILDING_ART[c.building];
   return (
     <View style={{ width: 220, borderRadius: 22, overflow: "hidden", borderWidth: 3, borderColor: "#fff",
@@ -89,6 +98,13 @@ function CardView({ c, busy, disabled, onPlay }: { c: Card; busy: boolean; disab
           <LinearGradient colors={["#7C6CFF", "#5A47F0"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ position: "absolute", inset: 0 }} />
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ fontFamily: F.heavy, fontSize: 15, color: "#fff" }}>I did it ✓</Text>}
         </Pressable>
+        {/* a workout card can be proven with a live photo (counts in full in clan wars) */}
+        {onProve && !busy && (
+          <Pressable accessibilityRole="button" accessibilityLabel={`Prove it with a live photo: ${c.title}`} disabled={disabled} onPress={() => { tap(); onProve(); }}
+                     style={({ pressed }) => ({ height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? "#E2E7FF" : "#EEF1FF" })}>
+            <Text style={{ fontFamily: F.bold, fontSize: 13, color: C.primary }}>📸 Prove it with a photo</Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );

@@ -9,7 +9,7 @@ export type GoalTemplate =
 export type Category =
   | "study" | "code" | "read" | "workout" | "sleep" | "eat" | "social_media" | "spend" | "save" | "focus" | "other";
 
-export type Source = "quick" | "text" | "voice" | "photo" | "screenshot" | "device" | "focus" | "seed" | "card";
+export type Source = "quick" | "text" | "voice" | "photo" | "screenshot" | "device" | "focus" | "seed" | "card" | "gym";
 
 export interface Goal {
   id: string;
@@ -46,6 +46,8 @@ export interface Activity {
   /** app name for screen time ("Instagram"); usage data is per app, not per feature */
   app?: string;
   source: Source;
+  /** how the move was proven: at the gym (location, checked in and out) or a live photo Muse Spark checked */
+  proof?: "location" | "photo";
 }
 
 export interface Pace {

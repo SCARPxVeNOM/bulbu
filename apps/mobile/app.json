@@ -60,6 +60,12 @@
             "usesCleartextTraffic": true
           }
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Bulbu checks you're at your gym when you check in. It keeps only your gym's spot, never where you go."
+        }
       ]
     ],
     "experiments": {

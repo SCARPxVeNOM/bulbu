@@ -14,6 +14,7 @@ import { Icon } from "@/components/Icon";
 import { Breakdown, Btn, Card, CardHead, Chip, Chips, Header, Progress, Row, Screen, Sheet, tap } from "@/components/ui";
 import { C, F, T } from "@/theme";
 import { BUILDING_ART } from "@/components/world/buildings";
+import { GymProof } from "@/components/world/GymProof";
 
 // what-if ideas follow the goal, not the building (the Castle holds whichever goal is the main one)
 const IDEAS: Partial<Record<GoalTemplate, string[]>> = {
@@ -127,6 +128,9 @@ export default function BuildingPanel() {
         </Card>
       </View>}
 
+      {/* workouts can be proven: your gym (check in, check out) or a live photo */}
+      {r.template === "fitness" && r.building && <GymProof />}
+
       {/* what if: try a change and see the new finish date */}
       {r.building && <View style={{ gap: 8 }}>
         <CardHead title="What if…" />
@@ -181,7 +185,7 @@ function MoveRow({ m, last, onPress }: { m: BuildingMove; last: boolean; onPress
       <Text style={{ fontSize: 18 }}>{later ? "🌫️" : "✨"}</Text>
       <View style={{ flex: 1 }}>
         <Text style={T.b}>{m.label}</Text>
-        <Text style={T.small}>{m.equivalent}</Text>
+        <Text style={T.small}>{m.proof ? `✓ verified ${m.proof === "location" ? "at the gym" : "by photo"} · ` : ""}{m.equivalent}</Text>
       </View>
       <Text style={{ fontFamily: F.heavy, fontSize: 13.5, color: later ? "#5B4AA8" : "#138A5A" }}>{later ? `${fmtDays(m.days).slice(1)} later` : `${fmtDays(-m.days).slice(1)} sooner`}</Text>
     </Pressable>

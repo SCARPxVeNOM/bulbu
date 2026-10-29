@@ -186,7 +186,7 @@ export default function Home() {
       )}
       {state.raid && <RaidSheet raid={state.raid} open={raidOpen} onClose={() => setRaidOpen(false)} />}
       <HandSheet open={cardsFor !== false} focus={cardsFor || null} cards={cards} onClose={() => setCardsFor(false)}
-                 onPlay={async c => { const r = await playCard(c.id); if (r) setCardsFor(false); }} />
+                 onPlay={async (c, photo) => { const r = await playCard(c.id, photo); if (r) setCardsFor(false); }} onError={toast} />
       {top && (
         <View pointerEvents="box-none" style={{ position: "absolute", left: 14, right: 14, bottom: 98 + ins.bottom }}>
           <MomentCard m={top} clear={clear} onClose={closeMoment}

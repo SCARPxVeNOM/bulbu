@@ -7,6 +7,7 @@ import {
 } from "@bulbu/engine";
 import { store, uid, type Fact, type User } from "./db.ts";
 import { clanBits } from "./clans.ts";
+import { verifyPhoto } from "./proof.ts";
 import { subtitleOf } from "./goals.ts";
 import { parseText, quickActivity } from "./parse.ts";
 import { ai, args, complete, tidy, CHAT_TOOLS, LOG_ACTIVITIES, PERSONA, SET_BULBU, type Msg, type Part, type ToolCall } from "./ai.ts";
@@ -197,7 +198,7 @@ export async function log(userId: string, input: LogInput, now = new Date()) {
 
 /** Store new moves and work out everything they did: impacts, forecasts, Bulbu's reaction, Light, unlocks, and the
  *  kingdom's moment. Every way in (typed, spoken, a screenshot, a played card) ends here. */
-async function applyMoves(userId: string, moves: Omit<Activity, "id" | "source">[], source: Source, questions: string[], via: "spark" | "offline" | "quick", now: Date,
+export async function applyMoves(userId: string, moves: Omit<Activity, "id" | "source">[], source: Source, questions: string[], via: "spark" | "offline" | "quick", now: Date,
                           react?: (impacts: Impact[], fallback: BulbuDirective) => BulbuDirective) {
   const user = store.user(userId)!, goals = store.goals(userId), history = store.activities(userId);
   const added: Activity[] = moves.map(a => ({ ...a, id: uid("a_"), source }));
@@ -275,14 +276,16 @@ export async function hand(userId: string, now = new Date()) {
 }
 
 /** Play a card: you did it in real life, so it becomes a move. Bulbu celebrates. */
-export async function playCard(userId: string, cardId: string, now = new Date()) {
+export async function playCard(userId: string, cardId: string, now = new Date(), photo?: { image: string; takenAt: number | null }) {
   await hand(userId, now);
   const user = store.user(userId)!, h = user.hand!;
   const card = h.cards.find(c => c.id === cardId);
+  // a workout card can come with a live photo: checked first, then the move is marked as proven
+  const proof = photo && card ? await verifyPhoto(userId, photo.image, photo.takenAt, now) : null;
   if (!card) throw Object.assign(new Error("That card isn't in today's hand."), { status: 404 });
   if (h.played.includes(cardId)) throw Object.assign(new Error("You've already played that card today."), { status: 409 });
   store.putUser({ ...user, hand: { ...h, played: [...h.played, cardId] } });
-  const move = { ...card.activity, label: card.title, at: now.toISOString() };
+  const move = { ...card.activity, label: card.title, at: now.toISOString(), ...(proof?.ok && { proof: "photo" as const }) };
   return applyMoves(userId, [move], "card", [], "quick", now, (impacts, fb) => {
     const sooner = -impacts.filter(i => i.goalId === card.goalId).reduce((s, i) => s + i.days, 0);
     return { ...fb, emote: "celebrating", animation: "Celebrate", glow: Math.max(fb.glow, 1), via: "engine",

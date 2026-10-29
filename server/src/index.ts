@@ -12,6 +12,7 @@ import { store, uid, type Fact, type User } from "./db.ts";
 import { makeGoal } from "./goals.ts";
 import { seed, seedIfEmpty, DEMO_USERS } from "./seed.ts";
 import { seedClans } from "./clanSeed.ts";
+import { gymCheckin, gymCheckout, gymPhoto, setGym } from "./proof.ts";
 import { clanView, claimSeason, collectWar, createClan, demoPass, donateLight, joinClan, leave, season, seenGifts, visit } from "./clans.ts";
 import { snapshot, log, chat, whatIf, reflect, remember, hand, playCard, defendRaid, kingdomWhatIfFor, type LogInput } from "./service.ts";
 import { ai, transcribe } from "./ai.ts";
@@ -108,7 +109,12 @@ app.post("/api/season/claim", async c => { const b = await c.req.json<{ tier: nu
 app.post("/api/season/pass", c => c.json(demoPass(c.get("uid"))));
 // Dim raids: a Defend session ended (minutes of focus); held off if long enough, with loot
 app.post("/api/raids/defend", async c => { const b = await c.req.json<{ id: string; minutes: number }>(); return c.json(await defendRaid(c.get("uid"), b.id, b.minutes)); });
-app.post("/api/cards/play", async c => c.json(await playCard(c.get("uid"), (await c.req.json<{ id: string }>()).id)));
+app.post("/api/cards/play", async c => { const b = await c.req.json<{ id: string; photo?: { image: string; takenAt: number | null } }>(); return c.json(await playCard(c.get("uid"), b.id, new Date(), b.photo)); });
+// proving a workout: your gym (set once, check in and out), or a live photo
+app.post("/api/gym", async c => c.json(setGym(c.get("uid"), await c.req.json())));
+app.post("/api/gym/checkin", async c => c.json(gymCheckin(c.get("uid"), await c.req.json())));
+app.post("/api/gym/checkout", async c => c.json(await gymCheckout(c.get("uid"), await c.req.json())));
+app.post("/api/gym/photo", async c => { const b = await c.req.json<{ image: string; takenAt: number | null; minutes?: number }>(); return c.json(await gymPhoto(c.get("uid"), b.image, b.takenAt, b.minutes)); });
 app.delete("/api/activities/:id", c => { store.deleteActivity(c.get("uid"), c.req.param("id")); return c.json({ ok: true }); });
 app.post("/api/kingdom/whatif", async c => c.json(await kingdomWhatIfFor(c.get("uid"), (await c.req.json<{ text: string }>()).text)));
 app.post("/api/whatif", async c => c.json(await whatIf(c.get("uid"), (await c.req.json<{ text: string }>()).text)));
