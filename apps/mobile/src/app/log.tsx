@@ -37,7 +37,10 @@ export default function Log() {
 
   const done = (r: LogResult) => {
     if (r.needsText) { setMsg(r.message ?? "Tell me in a sentence instead."); setMode("text"); setBusy(false); return; }
-    setLastLog(r); setReaction(r.bulbu); refresh(); router.replace("/impact");
+    setLastLog(r); setReaction(r.bulbu); refresh();
+    // a move that shifted a building plays out on the kingdom; anything else opens its impact
+    if (r.moments?.length) { if (router.canDismiss()) router.dismissAll(); router.navigate("/home" as never); }
+    else router.replace("/impact");
   };
   const submit = async (body: LogInput) => {
     setBusy(true); setMsg(null);

@@ -2,11 +2,11 @@
 // Pass `getUserId` from wherever the app keeps the session (localStorage on web, AsyncStorage / SecureStore on RN).
 import type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment,
 } from "@bulbu/engine";
 export type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment,
 };
 
 /** "sweater" and "hoodie" are the built-in outfits; the eight Bulbus are OutfitIds; null is no outfit. */
@@ -62,6 +62,8 @@ export interface LogResult {
   worldLevel?: { before: number; after: number };
   /** inventory items this log unlocked (a new level or streak) */
   items?: { id: string; name: string }[];
+  /** the buildings this moved: the kingdom plays them (fog rolls in or clears, the ETA slips or pulls back) */
+  moments?: KingdomMoment[];
   needsText?: boolean;
   message?: string;
 }

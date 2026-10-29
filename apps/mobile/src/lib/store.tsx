@@ -1,6 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
-import { api, BulbuError, type BulbuDirective, type LogResult, type Snapshot } from "./api";
+import { api, BulbuError, type BulbuDirective, type KingdomMoment, type LogResult, type Snapshot, type Swap } from "./api";
+
+/** What a new move did to the kingdom, played on Home: the fog rolls in or clears, the finish date slips or pulls back. */
+export interface Moment { key: number; items: KingdomMoment[]; swap: Swap | null }
 import { session } from "./session";
 
 interface Store {
@@ -18,6 +21,9 @@ interface Store {
   /** the last log result, shown on the Activity Impact screen */
   lastLog: LogResult | null;
   setLastLog(r: LogResult | null): void;
+  /** the kingdom moment waiting to play (or playing) on Home */
+  moment: Moment | null;
+  setMoment(m: Moment | null): void;
   toast(text: string): void;
   toastText: string | null;
 }
@@ -32,6 +38,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [reaction, setReaction] = useState<BulbuDirective | null>(null);
   const [lastLog, setLastLog] = useState<LogResult | null>(null);
+  const [moment, setMoment] = useState<Moment | null>(null);
   const [toastText, setToast] = useState<string | null>(null);
 
   useEffect(() => { session.load().then(setUserId); }, []);
@@ -59,16 +66,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // every log goes through here, so a newly earned Bulbu is always announced
   const recordLog = useCallback((r: LogResult | null) => {
     setLastLog(r);
+    setMoment(r?.moments?.length ? { key: Date.now(), items: r.moments, swap: r.swap } : null);
     const names = (r?.items ?? []).map(i => i.name);
     if (names.length) toast(`Unlocked ${names.join(" and ")} in your inventory!`);
     else if (r?.worldLevel && r.worldLevel.after > r.worldLevel.before) toast(`Level ${r.worldLevel.after}! Bulbu levelled up.`);
   }, [toast]);
 
   const value = useMemo<Store>(() => ({
-    userId, state, loading, error, refresh, reaction, setReaction, lastLog, setLastLog: recordLog, toast, toastText,
-    signIn: async (id: string) => { await session.set(id); setReaction(null); setLastLog(null); setState(null); setUserId(id); },
+    userId, state, loading, error, refresh, reaction, setReaction, lastLog, setLastLog: recordLog, moment, setMoment, toast, toastText,
+    signIn: async (id: string) => { await session.set(id); setReaction(null); setLastLog(null); setMoment(null); setState(null); setUserId(id); },
     signOut: async () => { await session.set(null); setUserId(null); setState(null); setReaction(null); },
-  }), [userId, state, loading, error, refresh, reaction, lastLog, recordLog, toast, toastText]);
+  }), [userId, state, loading, error, refresh, reaction, lastLog, recordLog, moment, toast, toastText]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

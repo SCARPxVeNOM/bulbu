@@ -6,6 +6,8 @@
 //   k.set({ buildings: [{ id: "Library", level: 3, building: true, glow: 0.6, fog: 0.2 }, …], plots: ["Vault"],
 //           treasure: { photo, mask, box } | null });
 //   k.anchors()   // { Library: [x, y, z], … } world points above each building, for the ETA labels
+//   k.moment({ id: "Library", kind: "dim", fogFrom: 0, fogTo: 0.7, glowFrom, glowTo })   // play an event on a building:
+//                 "dim" rolls the fog in from round it and dims it; "light" blows the fog away and flares it up
 //
 // The scene comes from public/kingdom.glb (scripts/build-kingdom.mjs), driven through its named nodes: floors
 // <Id>_F1.._F5 up to the level, <Id>_Roof on top, <Id>_Scaffold round the floor being built, <Id>_Plot for a goal-less
@@ -97,18 +99,19 @@ function island(THREE) {
 // ------------------------------------------------------------------ the stage
 export function createKingdom({ url }) {
   let want = { buildings: [], plots: [], treasure: null };
-  let ctl = null;
+  let ctl = null, pending = null;
   const stage = {
     orbit: true,
     controls: { minDistance: 12, maxDistance: 34, minPolarAngle: 38 * DEG, maxPolarAngle: 72 * DEG, minAzimuthAngle: -55 * DEG, maxAzimuthAngle: 55 * DEG, enablePan: false },
     view, background: paintKingdomSky,
     light: { scale: 1.08, env: 1.0 },
-    build(ctx) { ctl = build(ctx, url, () => want); return ctl.update; },
+    build(ctx) { ctl = build(ctx, url, () => want); if (pending) { ctl.moment(pending); pending = null; } return ctl.update; },
   };
   return {
     stage,
     set(s) { want = { buildings: s.buildings ?? [], plots: s.plots ?? [], treasure: s.treasure ?? null }; ctl?.apply(); },
     anchors() { return ctl ? ctl.anchors() : {}; },
+    moment(m) { if (ctl) ctl.moment(m); else pending = m; },
   };
 }
 
@@ -148,7 +151,7 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
       g.add(p); puffs.push(p);
     }
     root.add(g);
-    return { group: g, mat, puffs, now: 0 };
+    return { group: g, mat, puffs, now: 0, center: c };
   }
 
   new GLTFLoader().load(url, gltf => {
@@ -191,6 +194,7 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
     treasureAt = k.getObjectByName("Castle_Treasure");
     if (treasureAt) { mark(orbGroup); treasureAt.add(orbGroup); }
     loaded = true; apply();
+    if (queued) { const m = queued; queued = null; moment(m); }
   }, undefined, err => console.warn("kingdom", err));
 
   // ---- the Goal Treasure from a photo: the user's own item, cut out with SAM's mask, as a glowing card
@@ -251,6 +255,18 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
     setTreasure(s.treasure);
   }
 
+  // ---- an event on one building: the Dim rolls in from round it (a slow, visible drift), or blows away as it lights up
+  let queued = null;
+  function moment(m) {
+    const b = B[m?.id];
+    if (!loaded || !b) { queued = m; return; }
+    b.fog.now = m.fogFrom ?? b.fog.now;
+    b.glowNow = m.glowFrom ?? b.glowNow ?? 0;
+    b.target = { glow: m.glowTo ?? b.target?.glow ?? 0, fog: m.fogTo ?? b.target?.fog ?? 0 };
+    b.ev = { kind: m.kind, t: 0, from: b.fog.now };
+  }
+  const EV = 3.2;           // seconds the moment takes
+
   const tint = new THREE.Color("#6E648F"), warm = new THREE.Color("#FFC867"), v = new THREE.Vector3();
   function update(dt, t) {
     root.traverse(o => { if (o.userData.float != null) o.position.y += Math.sin(t * 0.6 + o.userData.float) * 0.0015; });
@@ -258,17 +274,27 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
     const k = 1 - Math.exp(-dt * 2.2);
     for (const b of Object.values(B)) {
       const tg = b.target ?? { glow: 0, fog: 0 };
-      b.glowNow = (b.glowNow ?? 0) + (tg.glow - (b.glowNow ?? 0)) * k;
-      b.fog.now += (tg.fog - b.fog.now) * k;
-      const f = b.fog.now, gl = b.glowNow;
+      // during a moment things move slowly enough to watch; a "light" flares the building on the way
+      const ev = b.ev; let spread = 1, flare = 0;
+      if (ev) {
+        ev.t += dt; const p = Math.min(1, ev.t / EV), e = 1 - Math.pow(1 - p, 3);
+        b.fog.now = ev.from + (tg.fog - ev.from) * e;
+        if (ev.kind === "dim") spread = 1 + 1.7 * (1 - e);            // the puffs drift in from outside
+        else { spread = 1 + 1.3 * e; flare = Math.sin(Math.min(1, ev.t / 1.4) * Math.PI) * 1.4; }   // ...or blow away
+        if (p >= 1) b.ev = null;
+      } else b.fog.now += (tg.fog - b.fog.now) * k;
+      b.glowNow = (b.glowNow ?? 0) + (tg.glow - (b.glowNow ?? 0)) * (ev ? k * 0.4 : k);
+      const f = ev && ev.kind === "light" ? Math.max(b.fog.now, ev.from * (1 - Math.min(1, ev.t / EV))) : b.fog.now, gl = b.glowNow + flare;
       // dim the building under the fog, warm it when it glows
       for (const m of b.mats) { m.color.copy(m.userData.base).lerp(tint, f * 0.6); m.emissive.copy(warm); m.emissiveIntensity = gl * 0.22 * (1 - f); }
-      b.fog.mat.opacity = Math.min(0.78, f * 0.95);
+      b.fog.mat.opacity = Math.min(0.78, f * 0.95) * (spread > 1 && ev?.kind === "light" ? Math.max(0, 1 - (spread - 1) / 1.3) : 1);
       b.fog.group.visible = f > 0.01;
+      const c = b.fog.center;
       for (const p of b.fog.puffs) {
         const s = p.userData.s * (0.55 + 0.45 * f) * (1 + 0.06 * Math.sin(t * 0.7 + p.userData.ph));
         const sc = Math.max(0.001, s * Math.min(1, f * 3)); p.scale.set(sc * 1.5, sc * 0.6, 1);
         p.position.copy(p.userData.base).add(v.set(Math.sin(t * 0.25 + p.userData.ph) * 0.35, Math.sin(t * 0.4 + p.userData.ph) * 0.12, Math.cos(t * 0.22 + p.userData.ph) * 0.3));
+        if (spread !== 1) { p.position.x = c.x + (p.position.x - c.x) * spread; p.position.z = c.z + (p.position.z - c.z) * spread; }
       }
       // new floors pop in with a little overshoot
       for (const [fl, p0] of b.pop) {
@@ -296,5 +322,5 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
     return out;
   }
 
-  return { update, apply, anchors };
+  return { update, apply, anchors, moment };
 }

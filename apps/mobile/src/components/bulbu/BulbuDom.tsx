@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { DOMProps } from "expo/dom";
 import { createBulbu } from "../../../../web/src/bulbu/engine.js";
 import { DAY_WORLD } from "../../../../web/src/bulbu/world.js";
-import { createKingdom, type KingdomView } from "../../../../web/src/bulbu/kingdom.js";
+import { createKingdom, type KingdomMomentView, type KingdomView } from "../../../../web/src/bulbu/kingdom.js";
 import emotes from "../../../../web/src/bulbu/emotes.json";
 
 export type BulbuView = "full" | "hero" | "side" | "close";
@@ -46,6 +46,8 @@ export interface BulbuDomProps {
   kingdom?: KingdomView;
   labels?: KingdomLabel[];
   onBuilding?: (id: string) => Promise<void>;
+  /** an event to play on a building (fog rolls in or clears); a new key plays it again */
+  moment?: (KingdomMomentView & { key: number }) | null;
   paused?: boolean;
   interactive?: boolean;
   onPoke?: () => Promise<void>;
@@ -53,11 +55,15 @@ export interface BulbuDomProps {
 }
 
 /** The floating label over a building: its name and level, and when its construction finishes. */
-export interface KingdomLabel { id: string; title: string; sub: string; kind: "building" | "built" | "plot"; dim: boolean }
+export interface KingdomLabel {
+  id: string; title: string; sub: string; kind: "building" | "built" | "plot"; dim: boolean;
+  /** during a moment: the date it was ("24 Jan") and the shift ("+3 days"), shown under the new date */
+  was?: string; shift?: string; tone?: "dim" | "light";
+}
 
 const base = () => { const b = process.env.EXPO_BASE_URL || "/"; return b.endsWith("/") ? b : b + "/"; };
 
-export default function BulbuDom({ emote, animation, cue, glow, outfit, gear, gearColor, show, line, background = "#E9F0FF", view = "full", world = false, kingdom, labels, onBuilding, paused = false, interactive = false, onPoke }: BulbuDomProps) {
+export default function BulbuDom({ emote, animation, cue, glow, outfit, gear, gearColor, show, line, background = "#E9F0FF", view = "full", world = false, kingdom, labels, onBuilding, moment, paused = false, interactive = false, onPoke }: BulbuDomProps) {
   const host = useRef<HTMLDivElement>(null);
   const bubble = useRef<HTMLDivElement>(null);
   const [api, setApi] = useState<Api | null>(null);
@@ -94,6 +100,8 @@ export default function BulbuDom({ emote, animation, cue, glow, outfit, gear, ge
   }, [api, background, view, interactive, world, isKingdom]);
   const kingdomKey = kingdom ? JSON.stringify(kingdom) : "";
   useEffect(() => { if (realm.current && kingdom) realm.current.set(kingdom); }, [kingdomKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // play a moment once the 3D is up (the kingdom queues it until its model has loaded)
+  useEffect(() => { if (api && realm.current && moment) realm.current.moment(moment); }, [api, moment?.key]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // the labels follow their buildings on screen (moved directly, every frame, without re-rendering)
   useEffect(() => {
@@ -153,7 +161,14 @@ export default function BulbuDom({ emote, animation, cue, glow, outfit, gear, ge
                   background: l.dim ? "rgba(122,112,170,.86)" : "rgba(255,255,255,.92)", boxShadow: "0 6px 14px rgba(40,40,120,.18)",
                   font: "800 11px/1.15 'Plus Jakarta Sans', system-ui, -apple-system, Roboto, sans-serif", color: l.dim ? "#fff" : "#141B4D" }}>
           <span>{l.title}</span>
-          <span style={{ fontWeight: 700, fontSize: 10, color: l.dim ? "#EDEAFF" : l.kind === "building" ? "#B3610B" : l.kind === "built" ? "#18935F" : "#5B6487" }}>{l.kind === "building" ? "🔨 " : l.kind === "built" ? "✓ " : "+ "}{l.sub}</span>
+          <span key={l.sub} style={{ fontWeight: 700, fontSize: 10, color: l.dim ? "#EDEAFF" : l.kind === "building" ? "#B3610B" : l.kind === "built" ? "#18935F" : "#5B6487",
+                         animation: l.was ? "slip .7s 1.1s cubic-bezier(.3,1.6,.5,1) both" : undefined }}>{l.kind === "building" ? "🔨 " : l.kind === "built" ? "✓ " : "+ "}{l.sub}</span>
+          {l.was && (
+            <span key={`${l.id}${l.was}${l.shift}`} style={{ display: "flex", gap: 4, alignItems: "center", fontWeight: 700, fontSize: 9.5, marginTop: 1 }}>
+              <s style={{ opacity: 0.75, animation: "strike .6s .5s both" }}>{l.was}</s>
+              <span style={{ padding: "1px 5px", borderRadius: 999, color: "#fff", background: l.tone === "light" ? "#18935F" : "#6B5BC2", animation: "slip .6s 1.6s cubic-bezier(.3,1.6,.5,1) both" }}>{l.shift}</span>
+            </span>
+          )}
         </button>
       ))}
       {!api && (
@@ -167,7 +182,7 @@ export default function BulbuDom({ emote, animation, cue, glow, outfit, gear, ge
           padding: "9px 12px", font: "700 13.5px/1.3 'Plus Jakarta Sans', system-ui, -apple-system, Roboto, sans-serif", boxShadow: "0 8px 20px rgba(40,60,160,.14)",
           pointerEvents: "none", animation: "pop .35s cubic-bezier(.3,1.6,.5,1)" }}>{line}</div>
       )}
-      <style>{"@keyframes pop { from { opacity: 0; transform: scale(.9); } } canvas { display: block; width: 100% !important; height: 100% !important; }"}</style>
+      <style>{"@keyframes pop { from { opacity: 0; transform: scale(.9); } } @keyframes slip { from { opacity: 0; transform: translateY(-6px) scale(.8); } } @keyframes strike { from { opacity: 1; text-decoration-color: transparent; } } canvas { display: block; width: 100% !important; height: 100% !important; }"}</style>
     </div>
   );
 }

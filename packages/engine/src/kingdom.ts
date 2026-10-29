@@ -84,7 +84,8 @@ export function kingdom(goals: Goal[], history: Activity[], now: Date): KingdomS
     return {
       id, name: BUILDINGS[id].name, goalId: g.id, goalTitle: g.title, level, building: !f.done,
       eta: f.eta, daysLeft: f.daysLeft, percent: f.percent,
-      glow: clamp(0.35 + m.sooner * 0.25 - m.later * 0.08), fog: clamp(m.later / 3),
+      // good moves push the Dim back as well as lighting the building up: clearing it is quick
+      glow: clamp(0.35 + m.sooner * 0.25 - m.later * 0.08), fog: clamp((m.later - m.sooner) / 3),
     };
   });
   const plots = (Object.keys(BUILDINGS) as BuildingId[]).filter(id => !taken.has(id));
@@ -163,3 +164,52 @@ export function buildingReport(id: BuildingId, goals: Goal[], history: Activity[
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** "2027-01-17" -> "17 Jan 2027" */
 export const niceDate = (iso: string) => { const [y, m, d] = iso.split("-").map(Number); return `${d} ${MONTHS[m - 1]} ${y}`; };
+
+// ------------------------------------------------------------------ the event moment
+
+/** What one new move did to a building: the Dim rolled in (later) or it lit up (sooner). The app plays it on the
+ *  kingdom: the fog rolls in or clears, the ETA label slips or pulls back, and Bulbu reacts. */
+export interface KingdomMoment {
+  id: BuildingId;
+  name: string;
+  goalId: string;
+  goalTitle: string;
+  kind: "dim" | "light";
+  /** signed: + later, − sooner */
+  days: number;
+  eta: string | null;
+  etaBefore: string | null;
+  fogBefore: number;
+  fogAfter: number;
+  glowBefore: number;
+  glowAfter: number;
+  levelBefore: number;
+  level: number;
+  /** the moves that did it ("2h on Instagram") */
+  moves: string[];
+  /** the maths, step by step (tap to see why) */
+  breakdown: Step[];
+  /** plain words: "about 3 DSA problems you could have solved" */
+  equivalent: string;
+}
+
+/** The buildings a set of new activities moved, biggest shift first. `history` excludes them; `added` are the new ones. */
+export function kingdomMoments(goals: Goal[], history: Activity[], added: Activity[], now: Date): KingdomMoment[] {
+  const after = [...history, ...added];
+  const k0 = kingdom(goals, history, now), k1 = kingdom(goals, after, now);
+  const out: KingdomMoment[] = [];
+  for (const b of k1.buildings) {
+    const was = k0.buildings.find(x => x.id === b.id && x.goalId === b.goalId);
+    const hits = added.flatMap(a => impactsOf(goals, after, a, now).filter(i => i.goalId === b.goalId).map(i => ({ a, i })));
+    const days = hits.reduce((s, h) => s + h.i.days, 0);
+    if (Math.abs(days) < 0.05 && (!was || was.level === b.level)) continue;
+    const top = [...hits].sort((x, y) => Math.abs(y.i.days) - Math.abs(x.i.days))[0];
+    out.push({
+      id: b.id, name: b.name, goalId: b.goalId, goalTitle: b.goalTitle, kind: days > 0 ? "dim" : "light", days,
+      eta: b.eta, etaBefore: was?.eta ?? null, fogBefore: was?.fog ?? 0, fogAfter: b.fog, glowBefore: was?.glow ?? 0, glowAfter: b.glow,
+      levelBefore: was?.level ?? 0, level: b.level, moves: hits.map(h => h.a.label),
+      breakdown: top?.i.breakdown ?? [], equivalent: top?.i.equivalent ?? "",
+    });
+  }
+  return out.sort((x, y) => Math.abs(y.days) - Math.abs(x.days));
+}

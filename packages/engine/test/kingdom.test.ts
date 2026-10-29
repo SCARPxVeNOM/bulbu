@@ -55,3 +55,18 @@ test("the building report: the construction maths adds up, and today's moves sho
   assert.equal(r.nextFloorAt, r.level * 20);
   assert.equal(buildingReport("Vault", [iphone, dsa], [], NOW), null, "no goal, no building");
 });
+
+test("a new move becomes a moment: scrolling rolls the Dim in and the finish slips; a good move lights it up", async () => {
+  const { kingdomMoments } = await import("../src/index.ts");
+  const ig = act({ category: "social_media", minutes: 120, app: "Instagram", label: "2h on Instagram" }, 0.5);
+  const [m] = kingdomMoments([iphone, dsa], [], [ig], NOW);
+  assert.equal(m.id, "Library"); assert.equal(m.kind, "dim");
+  assert.ok(m.days > 0 && m.fogAfter > m.fogBefore, "the Dim rolls in");
+  assert.ok((m.eta ?? "") > (m.etaBefore ?? ""), "the finish date slips");
+  assert.deepEqual(m.moves, ["2h on Instagram"]);
+  assert.ok(m.breakdown.length > 0);
+  const code = act({ category: "code", minutes: 90, units: 3, label: "Solved 3 problems" }, 0.2);
+  const [l] = kingdomMoments([iphone, dsa], [ig], [code], NOW);
+  assert.equal(l.kind, "light"); assert.ok(l.days < 0 && l.fogAfter < l.fogBefore && l.glowAfter > l.glowBefore);
+  assert.equal(kingdomMoments([iphone, dsa], [], [act({ category: "sleep", minutes: 480 })], NOW).length, 0, "a night's sleep moves nothing");
+});

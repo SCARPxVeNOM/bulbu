@@ -9,4 +9,7 @@ export function createKingdom(o: { url: string }): {
   set(s: KingdomView): void;
   /** world points above each shown building, for labels */
   anchors(): Record<string, [number, number, number]>;
+  /** play an event on a building: "dim" rolls the fog in and dims it, "light" blows the fog away and flares it */
+  moment(m: KingdomMomentView): void;
 };
+export interface KingdomMomentView { id: string; kind: "dim" | "light"; fogFrom?: number; fogTo?: number; glowFrom?: number; glowTo?: number }

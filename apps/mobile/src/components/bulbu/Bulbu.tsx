@@ -3,7 +3,7 @@
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import { useIsFocused } from "expo-router";
 import BulbuDom, { type BulbuView, type KingdomLabel } from "./BulbuDom";
-import type { KingdomView } from "../../../../web/src/bulbu/kingdom.js";
+import type { KingdomMomentView, KingdomView } from "../../../../web/src/bulbu/kingdom.js";
 import { tap } from "../ui";
 
 export interface BulbuProps {
@@ -23,6 +23,8 @@ export interface BulbuProps {
   kingdom?: KingdomView;
   labels?: KingdomLabel[];
   onBuilding?: (id: string) => void;
+  /** an event to play on a building: the fog rolls in or clears (a new key plays it again) */
+  moment?: (KingdomMomentView & { key: number }) | null;
   /** keep the WebView alive while the screen is in the background (Home) */
   keepAlive?: boolean;
   interactive?: boolean;

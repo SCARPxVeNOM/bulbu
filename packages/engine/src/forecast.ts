@@ -175,6 +175,6 @@ const approx = (n: number) => n < 0.75 ? "half a" : n < 1.5 ? "1" : String(Math.
 export function fmtDays(d: number): string {
   const a = Math.abs(d);
   if (a < 0.05) return "no change";
-  const v = a >= 1 ? String(Math.round(a)) : a.toFixed(1);
+  const v = a >= 0.95 ? String(Math.round(a)) : a.toFixed(1);       // 0.97 reads "1 day", never "1.0 days"
   return `${d > 0 ? "+" : "-"}${v} ${v === "1" ? "day" : "days"}`;
 }

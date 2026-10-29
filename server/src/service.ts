@@ -3,7 +3,7 @@ import {
   achievements, addDays, allImpacts, inventory, lightOf, NEW_WORLD, worldState, classifyApp, costGoal, newlyUnlocked, outfitById, outfitStates, dayKey, fmtDays, fmtMinutes, fmtMoney, forecast, glowFor, impactsOf, insights,
   level, patterns, progressSeries, reactionFor, simulate, streak, swapFor, typicalOrder,
   type Activity, type Category, type Change, type Emote, type Forecast, type Goal, type Impact, type WhatIf,
-  kingdom,
+  kingdom, kingdomMoments,
 } from "@bulbu/engine";
 import { store, uid, type Fact, type User } from "./db.ts";
 import { subtitleOf } from "./goals.ts";
@@ -178,7 +178,9 @@ export async function log(userId: string, input: LogInput, now = new Date()) {
   // things this log unlocked in the inventory (a new level or a streak)
   const had = new Set(inventory(goals, history, save, null, now).items.filter(i => i.owned).map(i => i.id));
   const items = inventory(goals, after, save, null, now).items.filter(i => i.owned && !had.has(i.id)).map(i => ({ id: i.id, name: i.name }));
-  return { activities: added, impacts, swap, questions: parsed.questions, forecasts, completed, bulbu, via, unlocked, light, worldLevel: lv, items };
+  // the kingdom's moment: the buildings this moved, for the fog to roll in (or clear) and the ETA to slip (or pull back)
+  const moments = kingdomMoments(goals, history, added, now);
+  return { activities: added, impacts, swap, questions: parsed.questions, forecasts, completed, bulbu, via, unlocked, light, worldLevel: lv, items, moments };
 }
 
 // ------------------------------------------------------------------ what-if
