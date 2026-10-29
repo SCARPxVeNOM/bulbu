@@ -106,9 +106,9 @@ export function inventory(goals: Goal[], history: Activity[], save: WorldSave, e
   const items = ITEMS.map((d): ItemState => {
     const r = real.find(x => x.item === d.id);
     let has = false, progress = 0, detail = "";
-    if (d.source === "level") { has = w.level >= d.need; progress = d.need ? Math.min(1, w.xp / xpAt(d.need)) : 1; detail = has ? "Unlocked by your level" : `Reach level ${d.need} · you're level ${w.level}`; }
+    if (d.source === "level") { has = w.level >= d.need || !!owned[d.id]; progress = has ? 1 : d.need ? Math.min(1, w.xp / xpAt(d.need)) : 1; detail = has ? (w.level >= d.need ? "Unlocked by your level" : "Collected in a season") : `Reach level ${d.need} · you're level ${w.level}`; }
     // anything already earned the old way (days in a row) stays yours
-    if (d.source === "play") { has = plays >= d.need || w.bestStreak >= d.need; progress = has ? 1 : Math.min(1, plays / d.need); detail = has ? `Unlocked by playing: ${d.need} cards and raids` : `Play ${d.need} cards or hold off raids · ${plays} so far`; }
+    if (d.source === "play") { has = plays >= d.need || w.bestStreak >= d.need || !!owned[d.id]; progress = has ? 1 : Math.min(1, plays / d.need); detail = has ? `Unlocked by playing: ${d.need} cards and raids` : `Play ${d.need} cards or hold off raids · ${plays} so far`; }
     if (d.source === "light") {
       // shop items can also be pieced together from Dim raid loot
       const got = save.pieces?.[d.id] ?? 0, of = RAID_PIECES[d.id];

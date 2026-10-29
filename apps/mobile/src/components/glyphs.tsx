@@ -85,6 +85,11 @@ export const G: Record<string, { tone: Tone; accent?: string; draw: Glyph }> = {
     <Circle cx="32" cy="32" r="9.5" fill={fill} />
     {Array.from({ length: 8 }, (_, i) => <Rect key={i} x="30" y="11.5" width="4" height="8" rx="2" fill={fill} transform={`rotate(${i * 45} 32 32)`} />)}
   </> },
+  shield: { tone: "indigo", draw: ({ fill, deep }) => <>
+    <Path d="M32 10.5 49.5 17v13.5c0 11.4-7.4 19.6-17.5 23.5-10.1-3.9-17.5-12.1-17.5-23.5V17Z" fill={fill} />
+    <Path d="M32 18.5 42.5 22.4v8.4c0 6.9-4.4 12-10.5 14.6Z" fill={deep} opacity=".35" />
+    <Path d="m32 22.5 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8Z" fill={deep} opacity=".6" />
+  </> },
   ban: { tone: "red", draw: ({ fill }) => <><Circle cx="32" cy="32" r="15.5" stroke={fill} strokeWidth="6" fill="none" /><Path d="M21.5 21.5l21 21" stroke={fill} strokeWidth="6" strokeLinecap="round" /></> },
   lock: { tone: "grey", draw: ({ fill, deep }) => <>
     <Path d="M24 30v-6a8 8 0 0 1 16 0v6" stroke={fill} strokeWidth="5" fill="none" />

@@ -5,7 +5,7 @@
 // waves (or shows off what you gave it). First time here, Bulbu gives you the tour.
 // After a new move (a screen-time screenshot, say) the kingdom plays the moment: the Dim rolls over the buildings it
 // slowed, their finish dates slip on the labels, Bulbu droops, and a card says what happened and how to clear it.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { fmtDays } from "@bulbu/engine";
 import { router } from "expo-router";
@@ -97,6 +97,17 @@ export default function Home() {
     } catch (e) { setWi(w => ({ ...w, busy: false, error: (e as Error).message })); }
   };
   const top = moment?.items[0] ?? null;
+  // Light a clanmate sent: say so once, then mark it seen
+  const giftKey = state?.clan?.gifts.map(g => g.at).join("|") ?? "";
+  const shownGifts = useRef("");
+  useEffect(() => {
+    const g = state?.clan?.gifts ?? [];
+    if (!g.length || shownGifts.current === giftKey) return;
+    shownGifts.current = giftKey;
+    const total = g.reduce((s, x) => s + x.light, 0), who = [...new Set(g.map(x => x.from))];
+    toast(`${who.length === 1 ? who[0] : `${who.length} clanmates`} sent you ${total} Light ✨`);
+    api.giftsSeen().catch(() => {});
+  }, [giftKey]);   // eslint-disable-line react-hooks/exhaustive-deps
   // the 3D side of the moment: the biggest shift plays on its building
   const play = useMemo(() => top && moment ? {
     key: moment.key, id: top.id, kind: top.kind, fogFrom: top.fogBefore, fogTo: top.fogAfter, glowFrom: top.glowBefore, glowTo: top.glowAfter,
@@ -133,7 +144,10 @@ export default function Home() {
              line={world.tutorial >= 0 || top || wi.open ? null : reaction?.line} animation={dimming ? "Sleepy" : reaction?.animation} cue={moment?.key ?? (reaction ? 1 : 0)} style={{ position: "absolute", inset: 0 }} />
       <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, top: 0, paddingTop: Math.max(12, ins.top + 4), paddingHorizontal: 14 }}>
         <Hud world={world} name={state.user.name} nudges={state.nudges.length}
-             extra={state.raid && <RaidChip raid={state.raid} onPress={() => setRaidOpen(true)} />} />
+             extra={<>
+               {state.raid && <RaidChip raid={state.raid} onPress={() => setRaidOpen(true)} />}
+               {state.clan?.war && <WarChip clan={state.clan} />}
+             </>} />
       </View>
 
       {/* the inventory, like a game's bag button (out of the way while a moment's card or the what-if is up) */}
@@ -148,6 +162,22 @@ export default function Home() {
         {shopReady > 0 && <View style={{ position: "absolute", top: -6, right: -6, minWidth: 22, height: 22, borderRadius: 11, backgroundColor: C.red, borderWidth: 2, borderColor: "#fff", alignItems: "center", justifyContent: "center", paddingHorizontal: 4 }}>
           <Text style={{ color: "#fff", fontFamily: F.heavy, fontSize: 11 }}>{shopReady}</Text></View>}
       </Pressable>}
+      {/* this month's season, above the cards */}
+      {!top && !wi.open && (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Season ${state.season.number}, tier ${state.season.tier}${state.season.claimable ? `, ${state.season.claimable} rewards to collect` : ""}`}
+                   onPress={() => { tap(); router.push("/season" as never); }}
+                   style={({ pressed }) => ({ position: "absolute", right: 16, bottom: 306 + ins.bottom, alignItems: "center", transform: [{ scale: pressed ? 0.94 : 1 }] })}>
+          <View style={{ width: 58, height: 58, borderRadius: 20, overflow: "hidden", borderWidth: 3, borderColor: "#fff", alignItems: "center", justifyContent: "center",
+                         shadowColor: "#5B4FD0", shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 8 }}>
+            <LinearGradient colors={["#B9A8FF", "#6C4DF0"]} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={{ position: "absolute", inset: 0 }} />
+            <Text style={{ fontFamily: F.heavy, fontSize: 9, color: "rgba(255,255,255,.85)" }}>SEASON</Text>
+            <Text style={{ fontFamily: F.heavy, fontSize: 20, color: "#fff", marginTop: -2 }}>{state.season.tier}</Text>
+          </View>
+          <Text style={{ marginTop: 4, fontFamily: F.heavy, fontSize: 12, color: "#fff", textShadowColor: "rgba(40,30,120,.55)", textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } }}>Season {state.season.number}</Text>
+          {state.season.claimable > 0 && <View style={{ position: "absolute", top: -6, right: -6, minWidth: 22, height: 22, borderRadius: 11, backgroundColor: C.red, borderWidth: 2, borderColor: "#fff", alignItems: "center", justifyContent: "center", paddingHorizontal: 4 }}>
+            <Text style={{ color: "#fff", fontFamily: F.heavy, fontSize: 11 }}>{state.season.claimable}</Text></View>}
+        </Pressable>
+      )}
       {/* the hand of cards, above the inventory */}
       {!top && !wi.open && (
         <View style={{ position: "absolute", right: 16, bottom: 212 + ins.bottom }}>
@@ -195,4 +225,16 @@ function whatIfIdeas(s: Snapshot): string[] {
     ...(t.has("reading") ? ["Read 20 pages a day"] : []),
     ...(t.has("fitness") ? ["Work out 4 times a week"] : []),
   ];
+}
+
+/** The game bar's clan war chip: the score, and a tap to the clan. */
+function WarChip({ clan }: { clan: NonNullable<Snapshot["clan"]> }) {
+  const w = clan.war!, ahead = w.us >= w.them;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`Clan war: ${clan.name} ${w.us}, ${w.rival} ${w.them}. Open your clan`} onPress={() => { tap(); router.navigate("/clan" as never); }}
+               style={{ borderRadius: 999, borderWidth: 1.5, borderColor: "#fff", paddingVertical: 6, paddingHorizontal: 11, backgroundColor: ahead ? "rgba(227,248,238,.95)" : "rgba(255,240,244,.95)",
+                        shadowColor: "#3448BE", shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 }}>
+      <Text style={{ fontFamily: F.heavy, fontSize: 12, color: ahead ? "#138A5A" : C.red }}>{clan.emblem} {w.us}–{w.them}{clan.warToCollect ? " · 🎁" : ""}</Text>
+    </Pressable>
+  );
 }

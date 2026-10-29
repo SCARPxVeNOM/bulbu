@@ -15,12 +15,20 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS goals      (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS activities (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, at TEXT NOT NULL, data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS facts      (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, data TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS clans      (id TEXT PRIMARY KEY, data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS messages   (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, at TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS activities_user ON activities(user_id, at);
 `);
 
 export interface User {
   id: string; name: string; createdAt: string; demo?: boolean;
+  /** a fictional clanmate in the demo clans (never offered as a profile to sign in as) */
+  npc?: boolean;
+  /** the clan this user builds with */
+  clanId?: string | null;
+  clanJoinedAt?: string;
+  /** when the user last saw Light their clanmates sent */
+  giftsSeenAt?: string;
   /** "sweater" | "hoodie" (built-in), one of the eight Bulbu outfit ids, or null */
   outfit: string | null; theme: string;
   /** the real-life item Bulbu is holding (on top of the outfit) */
@@ -40,6 +48,15 @@ export interface User {
   hand?: { day: string; cards: Card[]; played: string[]; via: "spark" | "engine" };
   /** nudge kinds the user dismissed, so Bulbu sends fewer of them */
   ignored?: Record<string, number>;
+}
+
+/** A clan: a study group that builds together, and fights clan wars (often college against college). */
+export interface Clan {
+  id: string; name: string; college: string; emblem: string; color: string; motto?: string; createdAt: string;
+  members: string[];
+  /** Light sent between clanmates, newest last */
+  donations: { from: string; to: string; light: number; at: string }[];
+  demo?: boolean;
 }
 
 /** A memory fact: who you are, how you behave, and what you promised. */
@@ -78,6 +95,10 @@ export const store = {
 
   messages: (uid: string, limit = 30) => (db.prepare("SELECT role, content, at FROM messages WHERE user_id = ? ORDER BY id DESC LIMIT ?").all(uid, limit) as { role: string; content: string; at: string }[]).reverse(),
   addMessage: (uid: string, role: string, content: string) => db.prepare("INSERT INTO messages (user_id, role, content, at) VALUES (?, ?, ?, ?)").run(uid, role, content, new Date().toISOString()),
+
+  clans: () => rows<Clan>("SELECT data FROM clans ORDER BY rowid"),
+  clan: (id: string) => rows<Clan>("SELECT data FROM clans WHERE id = ?", id)[0] as Clan | undefined,
+  putClan: (c: Clan) => db.prepare("INSERT OR REPLACE INTO clans (id, data) VALUES (?, ?)").run(c.id, JSON.stringify(c)),
 
   wipeUser: (uid: string) => { for (const t of ["goals", "activities", "facts", "messages"]) db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(uid); db.prepare("DELETE FROM users WHERE id = ?").run(uid); },
 };

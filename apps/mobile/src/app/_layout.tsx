@@ -62,6 +62,8 @@ function Root() {
         <Stack.Screen name="screen-time" />
         <Stack.Screen name="letter" />
         <Stack.Screen name="building/[id]" />
+        <Stack.Screen name="visit/[id]" options={{ animation: "fade" }} />
+        <Stack.Screen name="season" />
       </Stack.Protected>
     </Stack>
   );

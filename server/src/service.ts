@@ -3,9 +3,10 @@ import {
   achievements, addDays, allImpacts, inventory, lightOf, NEW_WORLD, worldState, classifyApp, costGoal, newlyUnlocked, outfitById, outfitStates, dayKey, fmtDays, fmtMinutes, fmtMoney, forecast, glowFor, impactsOf, insights,
   level, patterns, progressSeries, reactionFor, simulate, streak, swapFor, typicalOrder,
   type Activity, type Category, type Change, type Emote, type Forecast, type Goal, type Impact, type Step, type WhatIf,
-  kingdom, kingdomMoments, candidates, refreshCard, predictRaid, raidState, lootFor, defend, kingdomWhatIf, lateScroll, type Card, type Source, type Raid,
+  kingdom, kingdomMoments, seasonState, candidates, refreshCard, predictRaid, raidState, lootFor, defend, kingdomWhatIf, lateScroll, type Card, type Source, type Raid,
 } from "@bulbu/engine";
 import { store, uid, type Fact, type User } from "./db.ts";
+import { clanBits } from "./clans.ts";
 import { subtitleOf } from "./goals.ts";
 import { parseText, quickActivity } from "./parse.ts";
 import { ai, args, complete, tidy, CHAT_TOOLS, LOG_ACTIVITIES, PERSONA, SET_BULBU, type Msg, type Part, type ToolCall } from "./ai.ts";
@@ -50,6 +51,9 @@ export function snapshot(userId: string, now = new Date()) {
     world: worldState(goals, acts, user.world ?? NEW_WORLD, now),
     kingdom: kingdom(goals, acts, now),
     raid: raidView(user, goals, acts, now),
+    // the clan (war score, Light clanmates sent) and this month's season
+    clan: clanBits(user, now),
+    season: (() => { const s = seasonState(acts, user.world ?? NEW_WORLD, now); return { id: s.id, number: s.number, name: s.name, tier: s.tier, claimable: s.claimable, pass: s.pass, daysLeft: s.daysLeft }; })(),
     // how the kingdom's been played (instead of streaks and badges)
     play: { cardsPlayed: acts.filter(a => a.source === "card").length, raidsHeld: Object.keys(user.world?.raids ?? {}).length, buildings: kingdom(goals, acts, now).buildings.length },
     inventory: inventory(goals, acts, user.world ?? NEW_WORLD, user.outfit, now, user.gear ?? null),

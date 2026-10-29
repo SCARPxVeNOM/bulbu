@@ -35,6 +35,10 @@ export interface WorldSave {
   raids?: Record<string, { at: string; light: number }>;
   /** loot pieces collected toward an item (three Cape pieces make the Hero Cape) */
   pieces?: Record<string, number>;
+  /** clan wars whose Light was collected, by war id (the Monday it started) */
+  wars?: Record<string, { light: number; result: "won" | "lost" | "draw" }>;
+  /** this season's pass and the tiers collected (free and pass track) */
+  season?: { id: string; pass: boolean; free: number[]; paid: number[] };
 }
 export const NEW_WORLD: WorldSave = { spent: 0, gift: 0, tutorial: 0, owned: {}, real: [] };
 

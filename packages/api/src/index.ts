@@ -2,11 +2,11 @@
 // Pass `getUserId` from wherever the app keeps the session (localStorage on web, AsyncStorage / SecureStore on RN).
 import type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment, Card, Raid, RaidState, Loot, Knob, BuildingWhatIf,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment, Card, Raid, RaidState, Loot, Knob, BuildingWhatIf, WeekPlay, SeasonState, SeasonTier, Reward, WarResult,
 } from "@bulbu/engine";
 export type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment, Card, Raid, RaidState, Loot, Knob, BuildingWhatIf,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment, Card, Raid, RaidState, Loot, Knob, BuildingWhatIf, WeekPlay, SeasonState, SeasonTier, Reward, WarResult,
 };
 
 /** "sweater" and "hoodie" are the built-in outfits; the eight Bulbus are OutfitIds; null is no outfit. */
@@ -40,6 +40,10 @@ export interface Snapshot {
   kingdom: KingdomState;
   /** the next Dim raid, or null until there's a pattern to predict it from */
   raid: RaidView | null;
+  /** your clan: this week's war score and Light clanmates sent since you last looked (null when not in a clan) */
+  clan: ClanBits | null;
+  /** this month's season */
+  season: { id: string; number: number; name: string; tier: number; claimable: number; pass: boolean; daysLeft: number };
   /** how the kingdom's been played */
   play: { cardsPlayed: number; raidsHeld: number; buildings: number };
   /** everything Bulbu can wear or carry, and how each is earned */
@@ -79,6 +83,31 @@ export interface DefendResult extends Partial<LogResult> { raid: { held: true; l
 export interface KingdomWhatIfView {
   knob: Knob;
   stops: { value: number; label: string; buildings: (BuildingWhatIf & { id: BuildingId; name: string })[] }[];
+}
+// ------------------------------------------------------------------ clans and seasons
+export interface ClanBits {
+  id: string; name: string; emblem: string; color: string;
+  war: { us: number; them: number; rival: string; daysLeft: number } | null;
+  warToCollect: boolean;
+  gifts: { from: string; light: number; at: string }[];
+}
+export interface ClanBrief { id: string; name: string; college: string; emblem: string; color: string; motto?: string; members: number }
+export interface ClanMember {
+  id: string; name: string; me: boolean; outfit: string | null; level: number;
+  castle: { goalTitle: string; level: number; eta: string | null; building: boolean } | null;
+  buildings: { id: BuildingId; name: string; level: number; eta: string | null; building: boolean }[];
+  week: WeekPlay;
+}
+export interface ClanWar { id: string; endsAt: string; daysLeft: number; rival: ClanBrief; us: number; them: number }
+export interface LastWar { id: string; rival: ClanBrief; us: number; them: number; result: WarResult; collected: boolean; light: number }
+export interface ClanView {
+  clan: (ClanBrief & { members: ClanMember[]; war: ClanWar | null; lastWar: LastWar | null; sentToday: number;
+    donations: { from: string; to: string; light: number; at: string; fromName: string; toName: string }[] }) | null;
+  clans: ClanBrief[];
+}
+export interface Visit {
+  id: string; name: string; outfit: string | null; level: number; week: WeekPlay;
+  kingdom: { buildings: { id: BuildingId; name: string; goalTitle: string; level: number; building: boolean; eta: string | null; glow: number; fog: number }[]; plots: BuildingId[] };
 }
 export interface Hand { cards: Card[]; played: number; via: "spark" | "engine" }
 /** "Ask before you choose": what a choice would do to each building, and one swap. Nothing was stored. */
@@ -198,6 +227,19 @@ export function createBulbuClient(o: ClientOptions = {}) {
     playCard: (id: string) => call<LogResult>("POST", "/cards/play", { id }),
     /** a what-if across the kingdom, with every stop on its dial worked out */
     kingdomWhatIf: (text: string) => call<KingdomWhatIfView | { error: string }>("POST", "/kingdom/whatif", { text }),
+    // clans
+    clan: () => call<ClanView>("GET", "/clan"),
+    createClan: (b: { name: string; college?: string; emblem?: string; color?: string }) => call<ClanView>("POST", "/clans", b),
+    joinClan: (id: string) => call<ClanView>("POST", `/clans/${q(id)}/join`),
+    leaveClan: () => call<ClanView>("POST", "/clan/leave"),
+    donate: (to: string, light: number) => call<ClanView>("POST", "/clan/donate", { to, light }),
+    collectWar: () => call<{ light: number; result: WarResult; view: ClanView }>("POST", "/clan/war/collect"),
+    giftsSeen: () => call<{ ok: boolean }>("POST", "/clan/gifts/seen"),
+    visit: (id: string) => call<Visit>("GET", `/clan/members/${q(id)}`),
+    // seasons
+    season: () => call<SeasonState>("GET", "/season"),
+    claimSeason: (tier: number, track: "free" | "pass") => call<{ reward: Reward; season: SeasonState }>("POST", "/season/claim", { tier, track }),
+    seasonPass: () => call<SeasonState>("POST", "/season/pass"),
     /** a Defend session ended after `minutes` of focus */
     defendRaid: (id: string, minutes: number) => call<DefendResult>("POST", "/raids/defend", { id, minutes }),
     tutorial: (step: number, gift = false) => call<WorldState>("POST", "/world/tutorial", { step, gift }),

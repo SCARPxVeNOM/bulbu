@@ -11,12 +11,15 @@ const STARTER_LIGHT = 100;
 import { store, uid, type Fact, type User } from "./db.ts";
 import { makeGoal } from "./goals.ts";
 import { seed, seedIfEmpty, DEMO_USERS } from "./seed.ts";
+import { seedClans } from "./clanSeed.ts";
+import { clanView, claimSeason, collectWar, createClan, demoPass, donateLight, joinClan, leave, season, seenGifts, visit } from "./clans.ts";
 import { snapshot, log, chat, whatIf, reflect, remember, hand, playCard, defendRaid, kingdomWhatIfFor, type LogInput } from "./service.ts";
 import { ai, transcribe } from "./ai.ts";
 import { ingestUsage, type UsageInput } from "./usage.ts";
 import { cutout, dataUrlBytes, drawBulbuWith, dropMedia, identify, mediaPath, note, saveMedia } from "./purchase.ts";
 
 seedIfEmpty();
+seedClans();
 const app = new Hono<{ Variables: { uid: string } }>();
 
 // Expo web (the mobile app running in a browser) calls the API from another port. Phones send no Origin and need no CORS.
@@ -27,7 +30,7 @@ app.onError((err, c) => { const st = (err as { status?: number }).status ?? 500;
 app.get("/api/health", c => c.json({ ok: true, ai: ai.enabled, models: ai.models }));
 
 // ------------------------------------------------------------------ accounts (local profiles for now; Google/Apple sign-in later)
-app.get("/api/users", c => c.json(store.users().map(u => ({ id: u.id, name: u.name, demo: !!u.demo }))));
+app.get("/api/users", c => c.json(store.users().filter(u => !u.npc).map(u => ({ id: u.id, name: u.name, demo: !!u.demo }))));
 app.post("/api/users", async c => {
   const b = await c.req.json<{ name: string; goals: { template: GoalTemplate; title?: string; target?: number; baseline?: number }[] }>();
   const user: User = { id: uid("u_"), name: (b.name || "Friend").trim().slice(0, 40), createdAt: new Date().toISOString(), outfit: "sweater", theme: "sky" };
@@ -35,7 +38,7 @@ app.post("/api/users", async c => {
   b.goals.forEach((g, i) => store.putGoal(user.id, makeGoal(g.template, { ...(g.title && { title: g.title }), ...(g.target && { target: g.target }), baseline: g.baseline ?? 0, primary: i === 0 })));
   return c.json(user);
 });
-app.post("/api/demo/reset", c => { seed(); return c.json({ ok: true, users: DEMO_USERS.map(u => u.id) }); });
+app.post("/api/demo/reset", c => { seed(); seedClans(new Date(), true); return c.json({ ok: true, users: DEMO_USERS.map(u => u.id) }); });
 
 // photos, cut-outs and pictures from "I bought it" (random file names; no listing)
 // (readable from any page: the 3D view draws them into a texture, which needs CORS even for an image)
@@ -90,6 +93,19 @@ app.delete("/api/goals/:id", c => { store.deleteGoal(c.get("uid"), c.req.param("
 app.post("/api/log", async c => c.json(await log(c.get("uid"), await c.req.json<LogInput>())));
 // cards: today's hand (dealt once a day), and playing one (you did it in real life)
 app.get("/api/cards", async c => c.json(await hand(c.get("uid"))));
+// clans: study groups that build together; Light donations; weekly clan wars; visiting a clanmate's kingdom
+app.get("/api/clan", c => c.json(clanView(c.get("uid"))));
+app.post("/api/clans", async c => c.json(createClan(c.get("uid"), await c.req.json())));
+app.post("/api/clans/:id/join", c => c.json(joinClan(c.get("uid"), c.req.param("id"))));
+app.post("/api/clan/leave", c => c.json(leave(c.get("uid"))));
+app.post("/api/clan/donate", async c => { const b = await c.req.json<{ to: string; light: number }>(); return c.json(donateLight(c.get("uid"), b.to, b.light)); });
+app.post("/api/clan/war/collect", c => c.json(collectWar(c.get("uid"))));
+app.post("/api/clan/gifts/seen", c => { seenGifts(c.get("uid")); return c.json({ ok: true }); });
+app.get("/api/clan/members/:id", c => c.json(visit(c.get("uid"), c.req.param("id"))));
+// seasons: the month's tiers and rewards, and the Season Pass (a demo unlock until payments are connected)
+app.get("/api/season", c => c.json(season(c.get("uid"))));
+app.post("/api/season/claim", async c => { const b = await c.req.json<{ tier: number; track: "free" | "pass" }>(); return c.json(claimSeason(c.get("uid"), b.tier, b.track)); });
+app.post("/api/season/pass", c => c.json(demoPass(c.get("uid"))));
 // Dim raids: a Defend session ended (minutes of focus); held off if long enough, with loot
 app.post("/api/raids/defend", async c => { const b = await c.req.json<{ id: string; minutes: number }>(); return c.json(await defendRaid(c.get("uid"), b.id, b.minutes)); });
 app.post("/api/cards/play", async c => c.json(await playCard(c.get("uid"), (await c.req.json<{ id: string }>()).id)));
@@ -314,7 +330,7 @@ async function nightly(now = new Date()) {
   const today = now.toLocaleDateString("en-CA");
   reflecting = true;
   try {
-    for (const u of store.users()) {
+    for (const u of store.users().filter(u => !u.npc)) {
       if (u.reflectedAt && new Date(u.reflectedAt).toLocaleDateString("en-CA") === today) continue;
       if (!store.activities(u.id).length) continue;
       try { const r = await reflect(u.id, now); console.log(`[nightly] reflected for ${u.name} via ${r.via}`); }

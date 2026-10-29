@@ -15,7 +15,7 @@ import { tap } from "./ui";
 const TABS: Record<string, { icon: string; label: string }> = {
   home: { icon: "home", label: "Home" },
   goals: { icon: "target", label: "Quests" },
-  inventory: { icon: "trophy", label: "Inventory" },
+  clan: { icon: "shield", label: "Clan" },
   profile: { icon: "user", label: "Me" },
 };
 

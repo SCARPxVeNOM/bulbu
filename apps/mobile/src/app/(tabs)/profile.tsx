@@ -88,6 +88,8 @@ export default function Profile() {
       <Card style={{ paddingVertical: 4 }}>
         {[
           { to: "/inventory", icon: "trophy", color: "#F5A524", title: "Inventory", sub: `${s.inventory.items.filter(i => i.owned).length} things collected · wear and level up` },
+          { to: "/season", icon: "sparkles", color: "#6C4DF0", title: `Season ${s.season.number} · ${s.season.name}`, sub: `Tier ${s.season.tier} of 10${s.season.pass ? " · Season Pass" : ""}${s.season.claimable ? ` · ${s.season.claimable} to collect` : ""}` },
+          { to: "/clan", icon: "shield", color: "#7C6CFF", title: s.clan ? `${s.clan.emblem} ${s.clan.name}` : "Join a clan", sub: s.clan?.war ? `Clan war: ${s.clan.war.us}–${s.clan.war.them} vs ${s.clan.war.rival}` : "Build with friends, fight clan wars" },
           { to: "/letter", icon: "sparkles", color: "#3D5BFF", title: "A letter from your future self", sub: "Muse Wonder writes it at night, from your month" },
           { to: "/screen-time", icon: "phone", color: "#141B4D", title: "Screen time", sub: Platform.OS === "android" ? "Let Bulbu read app usage" : "Show Bulbu a Screen Time screenshot" },
           { to: "/memory", icon: "brain", color: "#7B5CFF", title: "What Bulbu remembers", sub: "See, edit or delete everything" },

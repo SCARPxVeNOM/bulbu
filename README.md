@@ -15,6 +15,9 @@ Most apps tell you what you did. Bulbu tells you what your next choice will do, 
 | **Dim raids.** Bulbu predicts when you usually drift ("A Dim raid is coming at 11 PM") and a storm gathers over the building it'll hit. Defend with a 25-minute focus session; a held raid drops loot (Light, Hero Cape and Golden Crown pieces). | Predicted drift | `raids.ts`; Muse Wonder writes the warning; a phone notification half an hour before |
 | **What if…** "What if I sleep by 12?" Turn the dial (nights a week, minutes a day…) and watch the finish dates move on the buildings, live. | Choosing | `kingdomWhatIf`: every stop on the dial worked out at once |
 | **Bulbu.** Evolves with you, wears outfits earned by levels and play, and shows how the week is going in its glow and face. | You | three.js engine, emotes, outfits, held real-life items |
+| **Clans.** Study groups that build together: see each other's buildings (never anyone's scrolling), visit a clanmate's kingdom, send each other Light. | Friends, classmates | `packages/engine/src/clans.ts`, `server/src/clans.ts` |
+| **Clan wars.** Clan against clan, often college against college, Monday to Sunday. Points come only from good moves (days pulled sooner, raids held off, cards played) and only the clan total counts. Winners collect 150 Light each, everyone who played 50. | Helping each other | `weekPlay`, `pairClans` |
+| **Seasons.** A month themed by one of the eight Bulbus, ten tiers climbed with season XP, a free reward on each, and the **Season Pass** (₹149 a month) with a second one: the season's Bulbu on tier 5, the Golden Crown on tier 10. | A month of choices | `packages/engine/src/seasons.ts` (payments aren't connected yet: the pass turns on as a demo) |
 | **The letter from your future self.** Muse Wonder reads your month every night and writes back. A story, not charts. | Reflection | `reflect()` |
 
 You tell Bulbu what happened by talking to it, showing it a screenshot (screen time, a receipt, a meal), or with Android's usage access. "Ask Bulbu before you choose" works the other way round: "about to order biryani?" comes back with what it does to your kingdom and one better swap.
@@ -27,8 +30,9 @@ You tell Bulbu what happened by talking to it, showing it a screenshot (screen t
 4. Tap the **Dim raid at 11 PM** chip → **Defend now** → 25 minutes later the raid's held and the loot drops.
 5. **What if I…** → "Sleep by 12" and drag the dial: the Castle's date moves live. As Priya, whose Castle is her iPhone 17, "Cook 3 nights a week" brings it about 7 weeks sooner.
 6. **Ask Bulbu** → "About to order biryani?": what it would do to the kingdom before you order, and one better swap.
+7. **Clan** → the war score against Night Owls, send Kabir 50 Light, visit his kingdom. **Season** → collect tier rewards, turn on the (demo) Season Pass.
 
-Demo users: **Aryan** (DSA student losing evenings to Instagram) and **Priya** (young earner saving for an iPhone 17), each with about 30 days of history so the forecasts, patterns and raids are live. `npm run seed` resets them.
+Demo users: **Aryan** (DSA student losing evenings to Instagram) and **Priya** (young earner saving for an iPhone 17), each with about 30 days of history so the forecasts, patterns and raids are live. Both are in the demo clan **NODE · BMSITM** with three fictional clanmates, at war with the fictional **Night Owls · Demo College**. `npm run seed` resets them.
 
 ## Run it
 
@@ -85,4 +89,4 @@ apps/web          The three.js engine and kingdom scene the phone app runs (src/
 - Google / Apple sign-in. Profiles are local to the server for now.
 - Bosses (exam deadlines with a health bar, learned patterns as named villains like "The 1 AM Spender").
 - UPI SMS as an input, and a background usage sync on Android (today it syncs when the app opens).
-- Pitch only: clans as study groups with Light donations, and monthly seasons.
+- Real payments for the Season Pass (it turns on as a demo), and clans across servers (today everyone in a clan shares one Bulbu server).

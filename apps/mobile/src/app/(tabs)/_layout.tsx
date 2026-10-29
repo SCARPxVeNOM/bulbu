@@ -8,6 +8,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="home" />
       <Tabs.Screen name="goals" />
       <Tabs.Screen name="inventory" />
+      <Tabs.Screen name="clan" />
       <Tabs.Screen name="profile" />
     </Tabs>
   );
