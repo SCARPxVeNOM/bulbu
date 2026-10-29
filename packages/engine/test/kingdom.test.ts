@@ -69,4 +69,8 @@ test("a new move becomes a moment: scrolling rolls the Dim in and the finish sli
   const [l] = kingdomMoments([iphone, dsa], [ig], [code], NOW);
   assert.equal(l.kind, "light"); assert.ok(l.days < 0 && l.fogAfter < l.fogBefore && l.glowAfter > l.glowBefore);
   assert.equal(kingdomMoments([iphone, dsa], [], [act({ category: "sleep", minutes: 480 })], NOW).length, 0, "a night's sleep moves nothing");
+  // good moves made before the scroll don't cancel it in advance: the Dim still rolls in
+  const yday = act({ category: "code", minutes: 180, units: 6, label: "Solved 6 problems" }, 20);
+  const [late] = kingdomMoments([iphone, dsa], [yday], [ig], NOW);
+  assert.ok(late.fogAfter > 0.2, "today's scroll still brings the Dim, after a good yesterday");
 });

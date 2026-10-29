@@ -69,23 +69,24 @@ export function kingdom(goals: Goal[], history: Activity[], now: Date): KingdomS
     const slot = !taken.has(want) ? want : !taken.has("Workshop") ? "Workshop" : null;
     if (slot) taken.set(slot, g);
   }
-  // what moved each goal lately: the last two days decide the fog and the glow
+  // what moved each goal lately, in the order it happened (the last two days): distraction rolls the Dim in, and a good
+  // move made after it pushes it back (clearing it is quick) as well as lighting the building up
   const since = +now - 2 * 86_400_000;
-  const recent = history.filter(a => +new Date(a.at) >= since && +new Date(a.at) <= +now);
-  const moved = new Map<string, { later: number; sooner: number }>();
+  const recent = history.filter(a => +new Date(a.at) >= since && +new Date(a.at) <= +now).sort((x, y) => +new Date(x.at) - +new Date(y.at));
+  const moved = new Map<string, { fog: number; glow: number }>();
   for (const a of recent) for (const i of impactsOf(goals, history, a, now)) {
-    const m = moved.get(i.goalId) ?? { later: 0, sooner: 0 };
-    if (i.days > 0) m.later += i.days; else m.sooner -= i.days;
+    const m = moved.get(i.goalId) ?? { fog: 0, glow: 0.35 };
+    if (i.days > 0) { m.fog = clamp(m.fog + i.days / 3); m.glow = clamp(m.glow - i.days * 0.08); }
+    else { m.fog = clamp(m.fog + i.days / 3); m.glow = clamp(m.glow - i.days * 0.25); }
     moved.set(i.goalId, m);
   }
   const buildings = [...taken.entries()].map(([id, g]): BuildingState => {
-    const f = forecast(g, goals, history, now), m = moved.get(g.id) ?? { later: 0, sooner: 0 };
+    const f = forecast(g, goals, history, now), m = moved.get(g.id) ?? { fog: 0, glow: 0.35 };
     const level = f.done ? MAX_FLOORS : 1 + Math.min(MAX_FLOORS - 1, Math.floor((f.percent / 100) * MAX_FLOORS));
     return {
       id, name: BUILDINGS[id].name, goalId: g.id, goalTitle: g.title, level, building: !f.done,
       eta: f.eta, daysLeft: f.daysLeft, percent: f.percent,
-      // good moves push the Dim back as well as lighting the building up: clearing it is quick
-      glow: clamp(0.35 + m.sooner * 0.25 - m.later * 0.08), fog: clamp((m.later - m.sooner) / 3),
+      glow: m.glow, fog: m.fog,
     };
   });
   const plots = (Object.keys(BUILDINGS) as BuildingId[]).filter(id => !taken.has(id));
