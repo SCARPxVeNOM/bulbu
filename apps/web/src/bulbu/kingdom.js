@@ -6,6 +6,7 @@
 //   k.set({ buildings: [{ id: "Library", level: 3, building: true, glow: 0.6, fog: 0.2 }, …], plots: ["Vault"],
 //           treasure: { photo, mask, box } | null });
 //   k.anchors()   // { Library: [x, y, z], … } world points above each building, for the ETA labels
+//   k.onSelect = (id, again) => …   // a tap picked a building (null: tapped away); k.select(id) picks one from the app
 //   k.set({ …, raid: { id: "Castle", state: "coming" | "striking" | "defended", near: 0..1 } | null })   // a Dim raid's
 //                 storm over its target: thicker as it nears, flickering while it strikes, scattering when held off
 //   k.moment({ id: "Library", kind: "dim", fogFrom: 0, fogTo: 0.7, glowFrom, glowTo })   // play an event on a building:
@@ -285,20 +286,31 @@ function meadow(THREE, tiles, keepOut) {
 // ------------------------------------------------------------------ the stage
 export function createKingdom({ url }) {
   let want = { buildings: [], plots: [], treasure: null, raid: null };
-  let ctl = null, pending = null;
-  const stage = {
+  let ctl = null, pending = null, selected = null;
+  const k = {
+    stage: null,
+    /** called when a tap picks a building (its id; `again` when it was already picked) or picks nothing (null) */
+    onSelect: null,
+    set(s) { want = { buildings: s.buildings ?? [], plots: s.plots ?? [], treasure: s.treasure ?? null, raid: s.raid ?? null }; ctl?.apply(); },
+    anchors() { return ctl ? ctl.anchors() : {}; },
+    moment(m) { if (ctl) ctl.moment(m); else pending = m; },
+    /** pick a building (it bounces and a ring lights up round it), or nothing */
+    select(id) { selected = id ?? null; ctl?.select(selected); },
+    get selected() { return selected; },
+  };
+  k.stage = {
     orbit: true,
     controls: { minDistance: 12, maxDistance: 34, minPolarAngle: 36 * DEG, maxPolarAngle: 70 * DEG, minAzimuthAngle: -55 * DEG, maxAzimuthAngle: 55 * DEG, enablePan: false },
     view, background: paintKingdomSky,
     light: { scale: 0.7, env: 1.0 },
-    build(ctx) { ctl = build(ctx, url, () => want); if (pending) { ctl.moment(pending); pending = null; } return ctl.update; },
+    build(ctx) { ctl = build(ctx, url, () => want); if (pending) { ctl.moment(pending); pending = null; } if (selected) ctl.select(selected); return ctl.update; },
+    // a tap on the island: the building under it (or nearest the tapped ground), else nothing
+    tap(ray) {
+      const id = ctl ? ctl.pick(ray) : null, again = !!id && id === selected;
+      k.select(id); k.onSelect?.(id, again);
+    },
   };
-  return {
-    stage,
-    set(s) { want = { buildings: s.buildings ?? [], plots: s.plots ?? [], treasure: s.treasure ?? null, raid: s.raid ?? null }; ctl?.apply(); },
-    anchors() { return ctl ? ctl.anchors() : {}; },
-    moment(m) { if (ctl) ctl.moment(m); else pending = m; },
-  };
+  return k;
 }
 
 function build({ THREE, scene, renderer, BLOOM_LAYER }, url, getState) {
@@ -435,7 +447,7 @@ function build({ THREE, scene, renderer, BLOOM_LAYER }, url, getState) {
       node.traverse(o => { if (!o.isMesh) return; const m = o.material; if (!mats.has(m)) { const c = m.clone(); c.userData.base = c.color.clone(); mats.set(m, c); } o.material = mats.get(m); });
       const by = n => node.getObjectByName(n);
       const levels = Array.from({ length: LEVELS }, (_, i) => by(`${id}_L${i + 1}`)).filter(Boolean);
-      B[id] = { id, node, mats: [...mats.values()], levels, scaffold: by(`${id}_Scaffold`), plot: by(`${id}_Plot`), level: 0, shown: null, pop: null };
+      B[id] = { id, node, baseScale: node.scale.clone(), mats: [...mats.values()], levels, scaffold: by(`${id}_Scaffold`), plot: by(`${id}_Plot`), level: 0, shown: null, pop: null };
       // the top of each level (for labels, the storm and the treasure), in the stage's space
       B[id].tops = [...levels, B[id].plot].map(l => {
         if (!l) return null;
@@ -488,6 +500,40 @@ function build({ THREE, scene, renderer, BLOOM_LAYER }, url, getState) {
     } catch { orbGroup.visible = true; }
   }
 
+  // ---- picking a building: a hex ring of light round its foot, and a little bounce
+  const ringMat = new THREE.MeshBasicMaterial({ color: "#FFD84A", transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -4 });
+  const selRing = new THREE.Mesh(new THREE.RingGeometry(1.06, 1.34, 6, 1, Math.PI / 6), ringMat);
+  selRing.layers.enable(BLOOM_LAYER);
+  selRing.rotation.x = -Math.PI / 2; selRing.renderOrder = 2; selRing.visible = false; selRing.name = "Selected";
+  const selGlow = new THREE.Mesh(new THREE.CircleGeometry(1.06, 6, Math.PI / 6), new THREE.MeshBasicMaterial({ color: "#FFF2B8", transparent: true, opacity: 0.3, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -3 }));
+  selGlow.renderOrder = 2; selGlow.position.z = -0.001; selRing.add(selGlow);   // (in the ring's own plane)
+  root.add(mark(selRing));
+  let sel = null;
+  function select(id) {
+    const b = id && B[id];
+    if (sel && sel !== b) { sel.node.scale.copy(sel.baseScale); sel.bounce = null; }
+    sel = b || null;
+    selRing.visible = !!sel;
+    if (!sel) return;
+    selRing.position.set(sel.node.position.x, 0.03, sel.node.position.z);
+    selRing.scale.setScalar(sel.node.scale.x * (sel.id === "Castle" ? 1.35 : 1));
+    sel.bounce = 0;
+  }
+  const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitP = new THREE.Vector3();
+  const shownChain = o => { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true; };
+  function pick(ray) {
+    if (!loaded) return null;
+    const live = Object.values(B).filter(b => b.node.visible);
+    const hit = ray.intersectObjects(live.map(b => b.node), true).find(h => shownChain(h.object));
+    if (hit) return live.find(b => { for (let p = hit.object; p; p = p.parent) if (p === b.node) return true; return false; })?.id ?? null;
+    // missed the model: the building nearest the tapped ground, if it's close
+    if (!ray.ray.intersectPlane(ground, hitP)) return null;
+    root.worldToLocal(hitP);
+    let best = null, bd = Infinity;
+    for (const b of live) { const d = Math.hypot(hitP.x - b.node.position.x, hitP.z - b.node.position.z) / b.node.scale.x; if (d < bd) { bd = d; best = b; } }
+    return best && bd < (best.id === "Castle" ? 1.9 : 1.3) ? best.id : null;
+  }
+
   // the top of a building as it stands now (its level, or its plot)
   const topOf = b => (b.level ? b.tops[b.level - 1] : b.tops[b.tops.length - 1]) ?? b.node.position;
 
@@ -514,6 +560,7 @@ function build({ THREE, scene, renderer, BLOOM_LAYER }, url, getState) {
       b.target = { glow: st ? st.glow : 0, fog: st ? st.fog : 0 };
     }
     if (changed) reshadow(2);
+    if (sel && !sel.node.visible) select(null);
     // the raid's storm sits over its target; when it's held off it scatters, then goes
     const r = s.raid, tb = r && B[r.id];
     if (tb && r.state !== "defended") {
@@ -600,6 +647,14 @@ function build({ THREE, scene, renderer, BLOOM_LAYER }, url, getState) {
       }
       if (held && stormGone >= 1) { stormFor = null; storm.visible = false; }
     } else storm.visible = false;
+    if (sel) {
+      ringMat.opacity = 0.75 + 0.25 * Math.sin(t * 4);
+      if (sel.bounce != null) {
+        const p = (sel.bounce += dt / 0.45), e = p >= 1 ? 0 : Math.sin(p * Math.PI * 2) * (1 - p) * 0.09;
+        sel.node.scale.set(sel.baseScale.x * (1 - e * 0.5), sel.baseScale.y * (1 + e), sel.baseScale.z * (1 - e * 0.5));
+        if (p >= 1) { sel.node.scale.copy(sel.baseScale); sel.bounce = null; }
+      }
+    }
     orbGroup.position.y = Math.sin(t * 1.4) * 0.12; orb.rotation.y += dt * 0.8; ring.rotation.z += dt * 0.5;
     orbMat.emissiveIntensity = 0.8 + 0.25 * Math.sin(t * 2.2);
     if (treasure) treasure.position.y = Math.sin(t * 1.4) * 0.12 + 0.2;
@@ -612,12 +667,12 @@ function build({ THREE, scene, renderer, BLOOM_LAYER }, url, getState) {
     for (const [id, b] of Object.entries(B)) {
       if (!b.node.visible) continue;
       const top = topOf(b);
-      v.set(top.x, top.y + (id === "Castle" ? 2.5 : 0.55), top.z);
+      v.set(top.x, top.y + 0.45, top.z);
       root.localToWorld(v);
       out[id] = [v.x, v.y, v.z];
     }
     return out;
   }
 
-  return { update, apply, anchors, moment };
+  return { update, apply, anchors, moment, pick, select };
 }

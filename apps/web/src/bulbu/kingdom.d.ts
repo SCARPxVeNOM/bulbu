@@ -12,5 +12,10 @@ export function createKingdom(o: { url: string }): {
   anchors(): Record<string, [number, number, number]>;
   /** play an event on a building: "dim" rolls the fog in and dims it, "light" blows the fog away and flares it */
   moment(m: KingdomMomentView): void;
+  /** a tap picked a building (`again`: it was already picked), or tapped away (null) */
+  onSelect: ((id: string | null, again: boolean) => void) | null;
+  /** pick a building from the app (it bounces and a ring lights up round it), or put it down */
+  select(id: string | null): void;
+  readonly selected: string | null;
 };
 export interface KingdomMomentView { id: string; kind: "dim" | "light"; fogFrom?: number; fogTo?: number; glowFrom?: number; glowTo?: number }

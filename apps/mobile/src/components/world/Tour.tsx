@@ -20,7 +20,7 @@ export function steps(name: string, level: number, light: number): Step[] {
       ? { text: `Your choices have already made ${light.toLocaleString("en-IN")} Light, so our kingdom starts at level ${level}! Let me show you round.`, emote: "thriving" }
       : { text: "It's a quiet island for now. Just me in my cosy sweater, and a few empty plots.", emote: "focused" },
     { text: "Every goal is a building: coding raises the Library, saving fills the Vault, workouts build the Arena. Your main goal is the Castle.", emote: "thriving" },
-    { text: "The label over each building says when construction finishes, at your pace. Tap it to see exactly why.", emote: "focused" },
+    { text: "Tap a building to see when its construction finishes, at your pace. Tap it again to see exactly why.", emote: "focused" },
     { text: "Scrolling rolls the Dim over the buildings it slows. It never breaks anything, and a good move clears it fast. 🌫️", emote: "drained" },
     { text: "I deal you three cards a day: small real-life moves. Do one, play it, and watch its building jump closer. 🃏", emote: "celebrating" },
     { text: "Before you choose, ask \"What if…\" and turn the dial. The finish dates move before you've done a thing. 🔮", emote: "happy" },

@@ -74,6 +74,14 @@ export default function BulbuDom({ emote, animation, cue, glow, outfit, gear, ge
   const labelEls = useRef<Record<string, HTMLButtonElement | null>>({});
   const isKingdom = !!kingdom;
   if (isKingdom && !realm.current) realm.current = createKingdom({ url: base() + "kingdom.glb" });
+  // tap a building to pick it (it bounces, a ring lights up round it and its label pops up); tap it again, or its
+  // label, to open it; tap anywhere else to put it down
+  const [picked, setPicked] = useState<string | null>(null);
+  useEffect(() => {
+    const k = realm.current; if (!k) return;
+    k.onSelect = (id: string | null, again: boolean) => { setPicked(id); if (id && again) void pick.current?.(id); };
+    return () => { k.onSelect = null; };
+  }, [isKingdom]);
 
   useEffect(() => {
     if (process.env.EXPO_DOM_HOST_OS) {        // inside the phone's WebView (on web this is a plain div in the page)
@@ -117,7 +125,11 @@ export default function BulbuDom({ emote, animation, cue, glow, outfit, gear, ge
           if (!p) { el.style.display = "none"; continue; }
           const [x, y] = api.toScreen(p[0], p[1], p[2]);
           el.style.display = "flex";
-          el.style.transform = `translate(${Math.round(x - r.left)}px, ${Math.round(y - r.top)}px) translate(-50%, -100%)`;
+          // keep the whole label on screen (near an edge it slides in; its point stays over the building)
+          const half = el.offsetWidth / 2, lx = Math.max(half + 6, Math.min(r.width - half - 6, x - r.left)), ly = Math.max(el.offsetHeight + 6, y - r.top);
+          el.style.transform = `translate(${Math.round(lx)}px, ${Math.round(ly)}px) translate(-50%, -100%)`;
+          const tip = el.lastElementChild as HTMLElement | null;
+          if (tip) tip.style.marginLeft = `${Math.round(Math.max(-half + 14, Math.min(half - 14, x - r.left - lx)) * 2)}px`;
         }
       }
       raf = requestAnimationFrame(tick);
@@ -153,22 +165,30 @@ export default function BulbuDom({ emote, animation, cue, glow, outfit, gear, ge
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden", background: isKingdom ? "#B9B8FF" : world ? "#a3b2f3" : background, touchAction: "none" }}>
       <div ref={host} style={{ position: "absolute", inset: 0 }} />
-      {api && isKingdom && (labels ?? []).map(l => (
+      {api && isKingdom && (labels ?? []).filter(l => l.id === picked || l.was).map(l => (
         <button key={l.id} ref={el => { labelEls.current[l.id] = el; }} onClick={() => { void pick.current?.(l.id); }}
-                aria-label={`${l.title}, ${l.sub}`}
-                style={{ position: "absolute", left: 0, top: 0, display: "none", flexDirection: "column", alignItems: "center", gap: 1, zIndex: 2,
-                  padding: "4px 9px 5px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,.95)", cursor: "pointer", whiteSpace: "nowrap",
-                  background: l.dim ? "rgba(122,112,170,.86)" : "rgba(255,255,255,.92)", boxShadow: "0 6px 14px rgba(40,40,120,.18)",
-                  font: "800 11px/1.15 'Plus Jakarta Sans', system-ui, -apple-system, Roboto, sans-serif", color: l.dim ? "#fff" : "#141B4D" }}>
-          <span>{l.title}</span>
-          <span key={l.sub} style={{ fontWeight: 700, fontSize: 10, color: l.dim ? "#EDEAFF" : l.kind === "building" ? "#B3610B" : l.kind === "built" ? "#18935F" : "#5B6487",
-                         animation: l.was ? "slip .7s 1.1s cubic-bezier(.3,1.6,.5,1) both" : undefined }}>{l.kind === "building" ? "🔨 " : l.kind === "built" ? "✓ " : "+ "}{l.sub}</span>
-          {l.was && (
-            <span key={`${l.id}${l.was}${l.shift}`} style={{ display: "flex", gap: 4, alignItems: "center", fontWeight: 700, fontSize: 9.5, marginTop: 1 }}>
-              <s style={{ opacity: 0.75, animation: "strike .6s .5s both" }}>{l.was}</s>
-              <span style={{ padding: "1px 5px", borderRadius: 999, color: "#fff", background: l.tone === "light" ? "#18935F" : "#6B5BC2", animation: "slip .6s 1.6s cubic-bezier(.3,1.6,.5,1) both" }}>{l.shift}</span>
-            </span>
-          )}
+                aria-label={`${l.title}, ${l.sub}. Open`}
+                style={{ position: "absolute", left: 0, top: 0, display: "none", flexDirection: "column", alignItems: "center", zIndex: 2, padding: 0, border: 0, background: "none", cursor: "pointer" }}>
+          <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, padding: "6px 12px 7px", borderRadius: 14, whiteSpace: "nowrap",
+                         border: "2px solid rgba(255,255,255,.95)", background: l.dim ? "rgba(122,112,170,.92)" : "rgba(255,255,255,.96)", boxShadow: "0 8px 18px rgba(40,40,120,.22)",
+                         font: "800 12.5px/1.15 'Plus Jakarta Sans', system-ui, -apple-system, Roboto, sans-serif", color: l.dim ? "#fff" : "#141B4D",
+                         transformOrigin: "50% 100%", animation: "label .32s cubic-bezier(.3,1.6,.5,1) both" }}>
+            <span>{l.title}</span>
+            <span key={l.sub} style={{ fontWeight: 700, fontSize: 11, color: l.dim ? "#EDEAFF" : l.kind === "building" ? "#B3610B" : l.kind === "built" ? "#18935F" : "#5B6487",
+                           animation: l.was ? "slip .7s 1.1s cubic-bezier(.3,1.6,.5,1) both" : undefined }}>{l.kind === "building" ? "🔨 " : l.kind === "built" ? "✓ " : "+ "}{l.sub}</span>
+            {l.was && (
+              <span key={`${l.id}${l.was}${l.shift}`} style={{ display: "flex", gap: 4, alignItems: "center", fontWeight: 700, fontSize: 10, marginTop: 1 }}>
+                <s style={{ opacity: 0.75, animation: "strike .6s .5s both" }}>{l.was}</s>
+                <span style={{ padding: "1px 5px", borderRadius: 999, color: "#fff", background: l.tone === "light" ? "#18935F" : "#6B5BC2", animation: "slip .6s 1.6s cubic-bezier(.3,1.6,.5,1) both" }}>{l.shift}</span>
+              </span>
+            )}
+            {l.id === picked && onBuilding && <span style={{ marginTop: 4, padding: "3px 10px", borderRadius: 999, background: l.dim ? "rgba(255,255,255,.22)" : "#6C4DF0", color: "#fff", fontWeight: 800, fontSize: 11 }}>
+              {l.kind === "plot" ? "Start building ›" : "Open ›"}</span>}
+          </span>
+          {/* the little point under the label, at the building */}
+          <span style={{ display: "block", width: 12, height: 12, marginTop: -7, transform: "rotate(45deg)", borderRadius: 2,
+                         background: l.dim ? "rgba(122,112,170,.92)" : "rgba(255,255,255,.96)", borderRight: "2px solid rgba(255,255,255,.95)", borderBottom: "2px solid rgba(255,255,255,.95)",
+                         animation: "label .32s cubic-bezier(.3,1.6,.5,1) both" }} />
         </button>
       ))}
       {!api && (
@@ -182,7 +202,7 @@ export default function BulbuDom({ emote, animation, cue, glow, outfit, gear, ge
           padding: "9px 12px", font: "700 13.5px/1.3 'Plus Jakarta Sans', system-ui, -apple-system, Roboto, sans-serif", boxShadow: "0 8px 20px rgba(40,60,160,.14)",
           pointerEvents: "none", animation: "pop .35s cubic-bezier(.3,1.6,.5,1)" }}>{line}</div>
       )}
-      <style>{"@keyframes pop { from { opacity: 0; transform: scale(.9); } } @keyframes slip { from { opacity: 0; transform: translateY(-6px) scale(.8); } } @keyframes strike { from { opacity: 1; text-decoration-color: transparent; } } canvas { display: block; width: 100% !important; height: 100% !important; }"}</style>
+      <style>{"@keyframes pop { from { opacity: 0; transform: scale(.9); } } @keyframes slip { from { opacity: 0; transform: translateY(-6px) scale(.8); } } @keyframes strike { from { opacity: 1; text-decoration-color: transparent; } } @keyframes label { from { opacity: 0; transform: translateY(8px) scale(.6); } } canvas { display: block; width: 100% !important; height: 100% !important; }"}</style>
     </div>
   );
 }

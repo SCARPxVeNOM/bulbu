@@ -40,7 +40,7 @@ export default function VisitKingdom() {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#B9B8FF" }}>
-      <Bulbu kingdom={view} labels={labels} onBuilding={() => {}} emote="happy" glow={0.95} outfit={v.outfit} style={{ position: "absolute", inset: 0 }} />
+      <Bulbu kingdom={view} labels={labels} emote="happy" glow={0.95} outfit={v.outfit} style={{ position: "absolute", inset: 0 }} />
       <View pointerEvents="box-none" style={{ position: "absolute", left: 14, right: 14, top: Math.max(12, ins.top + 4), flexDirection: "row", alignItems: "center", gap: 10 }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back to your clan" onPress={() => { tap(); if (router.canGoBack()) router.back(); else router.replace("/clan" as never); }}
                    style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,.92)", alignItems: "center", justifyContent: "center" }}>

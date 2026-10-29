@@ -40,7 +40,7 @@ export function Bulbu({ keepAlive = false, onPoke, onBuilding, style, cue, ...p 
       {mounted && (
         <BulbuDom {...p} cue={cue} paused={!focused}
                   onPoke={async () => { tap(); onPoke?.(); }}
-                  onBuilding={async (id: string) => { tap(); onBuilding?.(id); }}
+                  onBuilding={onBuilding ? async (id: string) => { tap(); onBuilding(id); } : undefined}
                   dom={{ scrollEnabled: false, bounces: false, overScrollMode: "never", style: { flex: 1, backgroundColor: "transparent" }, containerStyle: { flex: 1 } } as never} />
       )}
     </View>

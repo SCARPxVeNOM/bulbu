@@ -37,6 +37,7 @@ const BLOOM_LAYER = 1;
 //   orbit: false                                                 no drag-to-orbit / zoom (taps still poke Bulbu)
 //   background(ctx, w, h, project)                               paints the backdrop (canvas pixels); project(x, y, z) -> [px, py]
 //   build({ THREE, scene, camera, renderer, BLOOM_LAYER }) -> update(dt, t)   adds scene props once; update runs every frame
+//   tap(raycaster)                                               a tap that missed Bulbu (the ray through the tapped point)
 //   light: { scale, tint, glow, env }                            relight Bulbu for the world (e.g. night: dimmer, moon-blue, warmer own glow)
 //   controls: { minDistance, maxDistance, min/maxPolarAngle, … }  OrbitControls limits while the stage is up (with orbit: true)
 // Props with userData.noMask stay out of Bulbu's silhouette mask (so the halo still glows over them); props with
@@ -933,6 +934,7 @@ export function createBulbu({ container, glbBytes, emotes, reduceMotion = false,
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
     if (ray.intersectObject(model, true).length) poke();
+    else if (stageCfg && stageCfg.tap) stageCfg.tap(ray);    // a tap on the stage (the kingdom picks a building with it)
   });
   // tapping Bulbu: with a real-life item it shows it off, otherwise it waves back
   function poke() { popT = 0; if (gearId && gearGroup) { if (showT < 0) showGear(); } else if (!activity()) play("Wave"); onPoke && onPoke(); }
