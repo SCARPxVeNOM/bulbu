@@ -22,32 +22,34 @@ export function MomentCard({ m, swap, onOpen, onClose }: { m: KingdomMoment; swa
 
   return (
     <Animated.View style={{ opacity: rise, transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }] }}>
-      <View style={{ backgroundColor: "rgba(255,255,255,.96)", borderRadius: 20, paddingVertical: 10, paddingHorizontal: 12, gap: 8, borderWidth: 1.5, borderColor: "#fff",
+      <View style={{ backgroundColor: "rgba(255,255,255,.96)", borderRadius: 18, paddingVertical: 9, paddingHorizontal: 11, gap: 7, borderWidth: 1.5, borderColor: "#fff",
                      shadowColor: "#3B2F8F", shadowOpacity: 0.22, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 10 }}>
-        <Row gap={10}>
-          <View style={{ width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: dim ? "#ECE8FF" : "#E3F8EE" }}>
-            <Text style={{ fontSize: 19 }}>{dim ? "🌫️" : "✨"}</Text>
+        <Row gap={9}>
+          <View style={{ width: 32, height: 32, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: dim ? "#ECE8FF" : "#E3F8EE" }}>
+            <Text style={{ fontSize: 17 }}>{dim ? "🌫️" : "✨"}</Text>
           </View>
-          <Pressable style={{ flex: 1 }} accessibilityRole="button" accessibilityLabel={`${what}. See why`} onPress={() => { tap(); setWhy(true); }}>
-            <Text numberOfLines={1} style={{ fontFamily: F.heavy, fontSize: 15, color: C.ink }}>{dim ? `The Dim drifted over the ${m.name}` : `The ${m.name} lit up`}</Text>
-            <Text numberOfLines={2} style={{ fontFamily: F.semibold, fontSize: 12.5, color: C.ink2 }}>
-              {what}{m.eta ? ` · now ${shortDate(m.eta)}` : ""}{"  "}<Text style={{ fontFamily: F.bold, color: C.primary }}>See why ›</Text>
-            </Text>
-          </Pressable>
+          <View style={{ flex: 1 }}>
+            <Text numberOfLines={1} style={{ fontFamily: F.heavy, fontSize: 14.5, color: C.ink }}>{dim ? `The Dim drifted over the ${m.name}` : `The ${m.name} lit up`}</Text>
+            <Text numberOfLines={2} style={{ fontFamily: F.semibold, fontSize: 12, color: C.ink2 }}>{what}{m.eta ? ` · now ${shortDate(m.eta)}` : ""}</Text>
+          </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={() => { tap(); onClose(); }}
-                     style={{ width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "#F1F3FB", alignSelf: "flex-start" }}>
-            <Icon name="x" size={13} color={C.ink2} />
+                     style={{ width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#F1F3FB" }}>
+            <Icon name="x" size={12} color={C.ink2} />
           </Pressable>
         </Row>
-
-        {dim && swap && (
-          <Pressable accessibilityRole="button" accessibilityLabel={`A quick move clears it: ${swap.title}. ${swap.detail}`} onPress={() => { tap(); onOpen(); }}
-                     style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 7, paddingHorizontal: 10, borderRadius: 12, backgroundColor: pressed ? "#FFEFC2" : "#FFF7DE" })}>
-            <Text style={{ fontSize: 15 }}>🃏</Text>
-            <Text numberOfLines={1} style={{ flex: 1, fontFamily: F.bold, fontSize: 12.5, color: C.ink }}>Clear it: {swap.title}</Text>
-            <Icon name="right" size={13} color={C.ink2} />
+        <Row gap={6}>
+          <Pressable accessibilityRole="button" accessibilityLabel="See why: the maths" onPress={() => { tap(); setWhy(true); }}
+                     style={({ pressed }) => ({ paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999, backgroundColor: pressed ? "#E2E7FF" : "#EEF1FF" })}>
+            <Text style={{ fontFamily: F.bold, fontSize: 12, color: C.primary }}>See why ›</Text>
           </Pressable>
-        )}
+          {dim && swap && (
+            <Pressable accessibilityRole="button" accessibilityLabel={`A quick move clears it: ${swap.title}. ${swap.detail}`} onPress={() => { tap(); onOpen(); }}
+                       style={({ pressed }) => ({ flex: 1, flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999, backgroundColor: pressed ? "#FFEFC2" : "#FFF4D2" })}>
+              <Text style={{ fontSize: 12 }}>🃏</Text>
+              <Text numberOfLines={1} style={{ flex: 1, fontFamily: F.bold, fontSize: 12, color: "#7A4B00" }}>Clear it: {swap.title}</Text>
+            </Pressable>
+          )}
+        </Row>
       </View>
 
       <Sheet open={why} onClose={() => setWhy(false)} title={dim ? `Why the ${m.name} slowed down` : `Why the ${m.name} sped up`}>

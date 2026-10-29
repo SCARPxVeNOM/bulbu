@@ -287,12 +287,13 @@ function build({ THREE, scene, BLOOM_LAYER }, url, getState) {
       const f = ev && ev.kind === "light" ? Math.max(b.fog.now, ev.from * (1 - Math.min(1, ev.t / EV))) : b.fog.now, gl = b.glowNow + flare;
       // dim the building under the fog, warm it when it glows
       for (const m of b.mats) { m.color.copy(m.userData.base).lerp(tint, f * 0.6); m.emissive.copy(warm); m.emissiveIntensity = gl * 0.22 * (1 - f); }
-      b.fog.mat.opacity = Math.min(0.78, f * 0.95) * (spread > 1 && ev?.kind === "light" ? Math.max(0, 1 - (spread - 1) / 1.3) : 1);
+      // even a little of the Dim shows (a short scroll should be seen), and it thickens from there
+      b.fog.mat.opacity = (f > 0.01 ? Math.min(0.8, 0.28 + f * 0.75) : 0) * (spread > 1 && ev?.kind === "light" ? Math.max(0, 1 - (spread - 1) / 1.3) : 1);
       b.fog.group.visible = f > 0.01;
       const c = b.fog.center;
       for (const p of b.fog.puffs) {
         const s = p.userData.s * (0.55 + 0.45 * f) * (1 + 0.06 * Math.sin(t * 0.7 + p.userData.ph));
-        const sc = Math.max(0.001, s * Math.min(1, f * 3)); p.scale.set(sc * 1.5, sc * 0.6, 1);
+        const sc = Math.max(0.001, s * Math.min(1, 0.45 + f * 2)); p.scale.set(sc * 1.5, sc * 0.6, 1);
         p.position.copy(p.userData.base).add(v.set(Math.sin(t * 0.25 + p.userData.ph) * 0.35, Math.sin(t * 0.4 + p.userData.ph) * 0.12, Math.cos(t * 0.22 + p.userData.ph) * 0.3));
         if (spread !== 1) { p.position.x = c.x + (p.position.x - c.x) * spread; p.position.z = c.z + (p.position.z - c.z) * spread; }
       }
