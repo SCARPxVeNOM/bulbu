@@ -2,11 +2,11 @@
 // Pass `getUserId` from wherever the app keeps the session (localStorage on web, AsyncStorage / SecureStore on RN).
 import type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment, Card, Raid, RaidState, Loot,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment, Card, Raid, RaidState, Loot, Knob, BuildingWhatIf,
 } from "@bulbu/engine";
 export type {
   Achievement, Activity, AppKind, Category, Emote, Forecast, Goal, GoalTemplate, Impact, Insights, OutfitId, OutfitState,
-  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment, Card, Raid, RaidState, Loot,
+  Inventory, ItemSource, ItemState, Pattern, Step, Swap, WhatIf, WorldState, KingdomState, BuildingState, BuildingId, BuildingReport, BuildingMove, KingdomMoment, Card, Raid, RaidState, Loot, Knob, BuildingWhatIf,
 };
 
 /** "sweater" and "hoodie" are the built-in outfits; the eight Bulbus are OutfitIds; null is no outfit. */
@@ -73,6 +73,11 @@ export interface LogResult {
 export interface RaidView extends Raid { state: RaidState; loot: Loot; line: string }
 /** A Defend session's result: the move (like a log), and whether the raid was held off. */
 export interface DefendResult extends Partial<LogResult> { raid: { held: true; loot: Loot } | { held: false; message: string } }
+/** A what-if across the kingdom: the dial (what it turns, where it stops) and, for each stop, the buildings it moves. */
+export interface KingdomWhatIfView {
+  knob: Knob;
+  stops: { value: number; label: string; buildings: (BuildingWhatIf & { id: BuildingId; name: string })[] }[];
+}
 export interface Hand { cards: Card[]; played: number; via: "spark" | "engine" }
 export interface ChatReply { reply: string; bulbu?: BulbuDirective; whatIf?: WhatIf; focus?: number; remembered?: string[]; via: string }
 
@@ -183,6 +188,8 @@ export function createBulbuClient(o: ClientOptions = {}) {
     hand: () => call<Hand>("GET", "/cards"),
     /** play a card: you did it in real life; returns what it moved, like a log */
     playCard: (id: string) => call<LogResult>("POST", "/cards/play", { id }),
+    /** a what-if across the kingdom, with every stop on its dial worked out */
+    kingdomWhatIf: (text: string) => call<KingdomWhatIfView | { error: string }>("POST", "/kingdom/whatif", { text }),
     /** a Defend session ended after `minutes` of focus */
     defendRaid: (id: string, minutes: number) => call<DefendResult>("POST", "/raids/defend", { id, minutes }),
     tutorial: (step: number, gift = false) => call<WorldState>("POST", "/world/tutorial", { step, gift }),

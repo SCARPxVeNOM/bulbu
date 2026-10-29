@@ -3,7 +3,7 @@ import {
   achievements, addDays, allImpacts, inventory, lightOf, NEW_WORLD, worldState, classifyApp, costGoal, newlyUnlocked, outfitById, outfitStates, dayKey, fmtDays, fmtMinutes, fmtMoney, forecast, glowFor, impactsOf, insights,
   level, patterns, progressSeries, reactionFor, simulate, streak, swapFor, typicalOrder,
   type Activity, type Category, type Change, type Emote, type Forecast, type Goal, type Impact, type WhatIf,
-  kingdom, kingdomMoments, candidates, refreshCard, predictRaid, raidState, lootFor, defend, type Card, type Source, type Raid,
+  kingdom, kingdomMoments, candidates, refreshCard, predictRaid, raidState, lootFor, defend, kingdomWhatIf, lateScroll, type Card, type Source, type Raid,
 } from "@bulbu/engine";
 import { store, uid, type Fact, type User } from "./db.ts";
 import { subtitleOf } from "./goals.ts";
@@ -299,7 +299,7 @@ export function parseWhatIf(text: string, goals: Goal[], history: Activity[]): {
   let m: RegExpMatchArray | null;
   if (saver && (m = t.match(/cook\w*(?:\s+\w+)*?\s+(\d+|one|two|three|four|five|six|seven)\s*(?:nights?|days?|times?)/))) {
     const save = Math.max(50, Math.round(typicalOrder(history) - 100));
-    return { goal: saver, change: { label: `Cook ${m[1]} nights a week instead of ordering`, perWeek: per(m, 1), category: "save", amount: save } };
+    return { goal: saver, change: { label: `Cook ${per(m, 1)} nights a week instead of ordering`, perWeek: per(m, 1), category: "save", amount: save } };
   }
   if (saver && (m = t.match(/(?:skip|no|stop)\s+(?:ordering|delivery|swiggy|zomato|food delivery)/))) {
     const orders = history.filter(a => a.category === "eat" && +new Date(a.at) > Date.now() - 28 * 86400_000 && (a.amount ?? 0) > 250).length / 4;
@@ -312,32 +312,71 @@ export function parseWhatIf(text: string, goals: Goal[], history: Activity[]): {
   }
   const dsa = goals.find(g => g.template === "dsa");
   if (dsa && (m = t.match(/(?:solve|do)\s+(\d+|one|two|three|four|five)\s+(?:more\s+)?(?:dsa\s+|leetcode\s+)?(?:problems?|questions?)\s+(?:a|per|every)\s+(day|week)/)))
-    return { goal: dsa, change: { label: `Solve ${m[1]} more ${n(m[1]) === 1 ? "problem" : "problems"} a ${m[2]}`, perWeek: m[2] === "day" ? 7 : 1, category: "code", units: n(m[1]), minutes: 40 * n(m[1]) } };
+    return { goal: dsa, change: { label: `Solve ${n(m[1])} more ${n(m[1]) === 1 ? "problem" : "problems"} a ${m[2]}`, perWeek: m[2] === "day" ? 7 : 1, category: "code", units: n(m[1]), minutes: 40 * n(m[1]) } };
   const fit = goals.find(g => g.template === "fitness");
   if (fit && (m = t.match(/(?:work\s?out|gym|walk|run|exercise|yoga)\w*\s+(\d+|one|two|three|four|five|six|seven|once|twice)\s*(?:times?|days?)?\s*(?:a|per|every)?\s*week/)))
-    return { goal: fit, change: { label: `Work out ${m[1]}× a week`, perWeek: n(m[1]), category: "workout", units: 1, minutes: 30 } };
+    return { goal: fit, change: { label: `Work out ${n(m[1])}× a week`, perWeek: n(m[1]), category: "workout", units: 1, minutes: 30 } };
   const reading = goals.find(g => g.template === "reading");
   if (reading && (m = t.match(/read\s+(\d+)\s+pages?\s+(?:a|per|every)\s+day/)))
     return { goal: reading, change: { label: `Read ${m[1]} pages a day`, perWeek: 7, category: "read", units: n(m[1]), minutes: n(m[1]) * 2 } };
+  // sleep by 12: no scrolling after bedtime, so what you usually scroll after it goes to the goal scrolling slows
+  if (timeGoal && (m = t.match(/(?:sleep|bed|asleep|in bed)\w*\s+(?:by|before|at)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/))) {
+    const h12 = Number(m[1]), hour = m[3] === "pm" ? (h12 % 12) + 12 : m[3] === "am" ? h12 % 12 : h12 === 12 ? 0 : h12 <= 5 ? h12 : h12 + 12;
+    const minutes = Math.round(lateScroll(history, hour, new Date()));
+    const at = hour === 0 ? "12" : new Date(2000, 0, 1, hour).toLocaleTimeString("en-IN", { hour: "numeric", hour12: true }).replace(/\s?([ap])m/i, (_, x) => ` ${x.toUpperCase()}M`);
+    if (minutes >= 3) return { goal: timeGoal, change: { label: `Sleep by ${at}, 7 nights a week`, perWeek: 7, category: "social_media", minutes, reduce: true, knob: "perWeek" } };
+  }
   if (saver && (m = t.match(/save\s+(?:₹|rs\.?\s*)?([\d,]+)\s*(?:rs|rupees)?\s+(?:a|per|every)\s+(day|week|month)/)))
-    return { goal: saver, change: { label: `Save ₹${m[1]} a ${m[2]}`, perWeek: m[2] === "day" ? 7 : m[2] === "week" ? 1 : 7 / 30, category: "save", amount: n(m[1]) } };
+    return { goal: saver, change: { label: `Save ${fmtMoney(n(m[1]))} a ${m[2]}`, perWeek: m[2] === "day" ? 7 : m[2] === "week" ? 1 : 7 / 30, category: "save", amount: n(m[1]) } };
   return null;
 }
 
-export async function whatIf(userId: string, text: string, now = new Date()): Promise<WhatIf | { error: string }> {
+/** Turn a what-if into a plan (a goal and a change): the offline parser first, then Muse Spark for anything else. */
+async function planWhatIf(userId: string, text: string) {
   const goals = store.goals(userId), history = store.activities(userId);
   let plan = parseWhatIf(text, goals, history);
   if (!plan && ai.enabled) {
     try {
       const msg = await complete({ messages: [
-        { role: "system", content: `Turn the user's what-if into one simulate_what_if call. Goals: ${goals.map(g => `${g.id}=${g.title} (${g.template}, ${g.unit})`).join("; ")}. Typical delivery order ≈ ₹${Math.round(typicalOrder(history))}.` },
+        { role: "system", content: `Turn the user's what-if into one simulate_what_if call. Goals: ${goals.map(g => `${g.id}=${g.title} (${g.template}, ${g.unit})`).join("; ")}. Typical delivery order ≈ ₹${Math.round(typicalOrder(history))}. Write numbers in the label as digits ("Cook 3 nights a week").` },
         { role: "user", content: text }], tools: [CHAT_TOOLS[2]], toolChoice: "simulate_what_if" });
       const c = msg.tool_calls?.[0];
       if (c) { const a = args<WhatIfArgs>(c); const g = goals.find(g => g.id === a.goal_id); if (g) plan = { goal: g, change: changeFrom(a) }; }
     } catch (e) { console.warn("[spark] what-if failed:", (e as Error).message); }
   }
-  if (!plan) return { error: "Try a plan like “What if I cook 3 nights a week?”, “1 hour less Instagram”, or “solve 2 problems a day”." };
-  return simulate(plan.goal, goals, history, now, plan.change) ?? { error: `That change doesn't move ${plan.goal.title}.` };
+  return plan;
+}
+const TRY = "Try a plan like “What if I cook 3 nights a week?”, “Sleep by 12”, “1 hour less Instagram”, or “Solve 2 problems a day”.";
+/** When a plan can't be read, say why if it's because the goal it needs isn't there yet (cooking without a Vault). */
+function noPlan(text: string, goals: Goal[]) {
+  const t = text.toLowerCase();
+  if (/cook|sav|spend|order|swiggy|zomato|₹|rupee/.test(t) && !goals.some(g => g.kind === "savings"))
+    return "That one would fill the Vault, but you don't have a savings goal yet. Add one and the Vault gets built.";
+  if (/work ?out|gym|run|walk|yoga/.test(t) && !goals.some(g => g.template === "fitness"))
+    return "That one would raise the Arena, but you don't have a fitness goal yet. Add one and the Arena gets built.";
+  return TRY;
+}
+
+export async function whatIf(userId: string, text: string, now = new Date()): Promise<WhatIf | { error: string }> {
+  const plan = await planWhatIf(userId, text);
+  if (!plan) return { error: noPlan(text, store.goals(userId)) };
+  return simulate(plan.goal, store.goals(userId), store.activities(userId), now, plan.change) ?? { error: `That change doesn't move ${plan.goal.title}.` };
+}
+
+/** The what-if across the kingdom: every building the plan moves, with its new finish date, for each stop on the dial
+ *  (so the app can turn the dial and move the dates without asking again). */
+export async function kingdomWhatIfFor(userId: string, text: string, now = new Date()) {
+  const plan = await planWhatIf(userId, text);
+  const goals = store.goals(userId), history = store.activities(userId);
+  if (!plan) return { error: noPlan(text, goals) };
+  const w = kingdomWhatIf(goals, history, now, plan.change);
+  if (!w) return { error: `That change doesn't move any of your buildings. ${TRY}` };
+  const k = kingdom(goals, history, now), at = new Map(k.buildings.map(b => [b.goalId, b]));
+  return {
+    knob: w.knob,
+    stops: w.stops.map(s => ({ value: s.value, label: s.label,
+      buildings: s.goals.filter(g => at.has(g.goalId)).map(g => ({ ...g, id: at.get(g.goalId)!.id, name: at.get(g.goalId)!.name })) })),
+  };
 }
 
 interface WhatIfArgs { goal_id: string; label: string; per_week: number; category: Category; minutes?: number; amount?: number; units?: number; reduce?: boolean }

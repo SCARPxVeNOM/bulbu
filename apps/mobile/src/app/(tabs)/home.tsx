@@ -19,20 +19,24 @@ import { Tour } from "@/components/world/Tour";
 import { MomentCard } from "@/components/world/MomentCard";
 import { HandButton, HandSheet } from "@/components/world/Hand";
 import { RaidChip, RaidSheet } from "@/components/world/Raid";
+import { WhatIfBar, WhatIfPanel } from "@/components/world/WhatIf";
 import { GlossyIcon } from "@/components/GlossyIcon";
 import { tap } from "@/components/ui";
 import { C, F } from "@/theme";
 import type { KingdomLabel } from "@/components/bulbu/BulbuDom";
-import type { BuildingId, KingdomMoment, Snapshot } from "@bulbu/api";
+import type { BuildingId, KingdomMoment, KingdomWhatIfView, Snapshot } from "@bulbu/api";
 
 const PLOT_NAME: Record<BuildingId, string> = { Castle: "Castle", Library: "Library Tower", Vault: "Vault", Arena: "Arena", Observatory: "Observatory", Workshop: "Workshop" };
 const shortDate = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 
 /** What the 3D kingdom shows, and the labels over it. */
-function kingdomView(s: Snapshot, moments: KingdomMoment[] = []) {
+type SimStop = KingdomWhatIfView["stops"][number];
+function kingdomView(s: Snapshot, moments: KingdomMoment[] = [], sim: SimStop | null = null) {
   const k = s.kingdom, mo = new Map(moments.map(m => [m.id, m]));
+  // a what-if on the dial: the buildings it moves light up, and their labels show the new date
+  const simAt = new Map((sim?.buildings ?? []).map(b => [b.id as string, b]));
   const view = {
-    buildings: k.buildings.map(b => ({ id: b.id, level: b.level, building: b.building, glow: b.glow, fog: b.fog })),
+    buildings: k.buildings.map(b => ({ id: b.id, level: b.level, building: b.building, glow: simAt.has(b.id) ? 1 : b.glow, fog: b.fog })),
     plots: k.plots,
     treasure: treasureOf(s),
     // the next Dim raid's storm over its target, thicker as it nears (six hours out to the hour it strikes)
@@ -42,7 +46,11 @@ function kingdomView(s: Snapshot, moments: KingdomMoment[] = []) {
   };
   const labels: KingdomLabel[] = [
     ...k.buildings.map(b => {
-      const m = mo.get(b.id);
+      const m = sim ? undefined : mo.get(b.id), w = simAt.get(b.id);
+      if (w && w.eta) return {
+        id: b.id, title: `${b.name} · Lv ${b.level}`, kind: "building" as const, dim: false, sub: `Ready ${shortDate(w.eta)}`,
+        was: w.etaBefore && w.etaBefore !== w.eta ? shortDate(w.etaBefore) : undefined, shift: `${w.daysSooner} ${w.daysSooner === 1 ? "day" : "days"} sooner`, tone: "light" as const,
+      };
       return {
         id: b.id, title: `${b.name} · Lv ${b.level}`, kind: b.building ? "building" as const : "built" as const, dim: b.fog > 0.35,
         sub: !b.building ? "Built!" : b.eta ? `Ready ${shortDate(b.eta)}` : "Waiting for a first move",
@@ -78,6 +86,16 @@ export default function Home() {
   // the hand sheet: false when closed, otherwise the building whose card goes first (or null)
   const [cardsFor, setCardsFor] = useState<string | null | false>(false);
   const [raidOpen, setRaidOpen] = useState(false);
+  // the what-if: open, the result (every stop on the dial), and where the dial is
+  const [wi, setWi] = useState<{ open: boolean; result: KingdomWhatIfView | null; stop: number; busy: boolean; error: string | null }>({ open: false, result: null, stop: 0, busy: false, error: null });
+  const askWhatIf = async (text: string) => {
+    setWi(w => ({ ...w, busy: true, error: null }));
+    try {
+      const r = await api.kingdomWhatIf(text);
+      if ("error" in r) setWi(w => ({ ...w, busy: false, result: null, error: r.error }));
+      else setWi(w => ({ ...w, busy: false, result: r, stop: r.knob.index }));
+    } catch (e) { setWi(w => ({ ...w, busy: false, error: (e as Error).message })); }
+  };
   const top = moment?.items[0] ?? null;
   // the 3D side of the moment: the biggest shift plays on its building
   const play = useMemo(() => top && moment ? {
@@ -91,8 +109,10 @@ export default function Home() {
   // Bulbu gets sleepy when today is mostly scrolling
   // ...and droops while the Dim rolls in
   const dimming = top?.kind === "dim";
-  const emote = dimming ? "drained" : reaction?.emote ?? (world.fog > 0.6 ? "drained" : state.emote);
-  const kv = kingdomView(state, moment?.items);
+  const sim = wi.open && wi.result ? wi.result.stops[wi.stop] : null;
+  const emote = sim?.buildings.length ? "thriving" : dimming ? "drained" : reaction?.emote ?? (world.fog > 0.6 ? "drained" : state.emote);
+  const kv = kingdomView(state, moment?.items, sim);
+  const ideas = whatIfIdeas(state);
   const closeMoment = () => { setMoment(null); setReaction(null); };
   const openBuilding = (id: string) => {
     const b = state.kingdom.buildings.find(x => x.id === id);
@@ -110,14 +130,14 @@ export default function Home() {
       <Bulbu kingdom={kv.view} labels={kv.labels} onBuilding={openBuilding} moment={play} keepAlive emote={emote}
              glow={(dimming ? Math.min(0.3, reaction?.glow ?? state.glow) : reaction?.glow ?? state.glow) + (wearing ? (wearing.level - 1) * 0.15 : 0)} outfit={state.user.outfit}
              gear={held?.hold ? held.id : null} gearColor={held?.mine?.color}
-             line={world.tutorial >= 0 || top ? null : reaction?.line} animation={dimming ? "Sleepy" : reaction?.animation} cue={moment?.key ?? (reaction ? 1 : 0)} style={{ position: "absolute", inset: 0 }} />
+             line={world.tutorial >= 0 || top || wi.open ? null : reaction?.line} animation={dimming ? "Sleepy" : reaction?.animation} cue={moment?.key ?? (reaction ? 1 : 0)} style={{ position: "absolute", inset: 0 }} />
       <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, top: 0, paddingTop: Math.max(12, ins.top + 4), paddingHorizontal: 14 }}>
         <Hud world={world} name={state.user.name} nudges={state.nudges.length}
              extra={state.raid && <RaidChip raid={state.raid} onPress={() => setRaidOpen(true)} />} />
       </View>
 
-      {/* the inventory, like a game's bag button (out of the way while a moment's card is up) */}
-      {!top && <Pressable accessibilityRole="button" accessibilityLabel={`Inventory${shopReady ? `, ${shopReady} things you can buy` : ""}`} onPress={() => { tap(); router.navigate("/inventory" as never); }}
+      {/* the inventory, like a game's bag button (out of the way while a moment's card or the what-if is up) */}
+      {!top && !wi.open && <Pressable accessibilityRole="button" accessibilityLabel={`Inventory${shopReady ? `, ${shopReady} things you can buy` : ""}`} onPress={() => { tap(); router.navigate("/inventory" as never); }}
                  style={({ pressed }) => ({ position: "absolute", right: 16, bottom: 118 + ins.bottom, alignItems: "center", transform: [{ scale: pressed ? 0.94 : 1 }] })}>
         <View style={{ width: 66, height: 66, borderRadius: 22, overflow: "hidden", borderWidth: 3, borderColor: "#fff", alignItems: "center", justifyContent: "center",
                        shadowColor: "#5B4FD0", shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 8 }}>
@@ -129,7 +149,7 @@ export default function Home() {
           <Text style={{ color: "#fff", fontFamily: F.heavy, fontSize: 11 }}>{shopReady}</Text></View>}
       </Pressable>}
       {/* the hand of cards, above the inventory */}
-      {!top && (
+      {!top && !wi.open && (
         <View style={{ position: "absolute", right: 16, bottom: 212 + ins.bottom }}>
           <HandButton cards={cards} onPress={() => setCardsFor(null)} />
         </View>
@@ -143,11 +163,17 @@ export default function Home() {
                       onOpen={() => { if (clearCard) setCardsFor(top.id); else { closeMoment(); openBuilding(top.id); } }} />
         </View>
       )}
-      {!top && (wearing || held) && (
-        <View pointerEvents="none" style={{ position: "absolute", left: 16, right: 100, bottom: 130 + ins.bottom, alignItems: "flex-start" }}>
-          <View style={{ backgroundColor: "rgba(255,255,255,.85)", borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1.5, borderColor: "#fff" }}>
-            <Text numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 12, color: C.ink }}>{[wearing && `Wearing ${wearing.name} · ${"★".repeat(wearing.level)}`, held && `· tap Bulbu to see your ${held.name}`].filter(Boolean).join(" ")}</Text>
-          </View>
+      {/* the what-if: the main way to play with the future. The bar, and the panel with its dial */}
+      {!top && !wi.open && (
+        <View style={{ position: "absolute", left: 16, right: 100, bottom: 126 + ins.bottom }}>
+          <WhatIfBar onPress={() => setWi(w => ({ ...w, open: true }))} />
+        </View>
+      )}
+      {wi.open && (
+        <View pointerEvents="box-none" style={{ position: "absolute", left: 14, right: 14, bottom: 98 + ins.bottom }}>
+          <WhatIfPanel ideas={ideas} result={wi.result} stop={wi.stop} busy={wi.busy} error={wi.error}
+                       onAsk={askWhatIf} onStop={i => setWi(w => ({ ...w, stop: i }))}
+                       onClose={() => setWi({ open: false, result: null, stop: 0, busy: false, error: null })} />
         </View>
       )}
 
@@ -156,4 +182,17 @@ export default function Home() {
       )}
     </View>
   );
+}
+
+/** Plans to try, from the goals you have (and your late-night scrolling, if there is a raid to predict). */
+function whatIfIdeas(s: Snapshot): string[] {
+  const t = new Set(s.goals.map(g => g.template));
+  return [
+    ...(s.raid ? ["Sleep by 12"] : []),
+    ...(t.has("savings") || t.has("iphone") ? ["Cook 3 nights a week"] : []),
+    ...(t.has("dsa") ? ["Solve 2 problems a day"] : []),
+    "1 hour less Instagram a day",
+    ...(t.has("reading") ? ["Read 20 pages a day"] : []),
+    ...(t.has("fitness") ? ["Work out 4 times a week"] : []),
+  ];
 }
