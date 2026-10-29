@@ -65,7 +65,7 @@ function raidView(user: User, goals: Goal[], acts: Activity[], now: Date) {
   const won = save.raids?.[r.id];
   return {
     ...r, state, loot: state === "defended" ? { light: won!.light } : lootFor(r, save),
-    line: user.raidLine?.id === r.id ? user.raidLine.text : `A Dim raid is coming at ${r.label}. It's heading for the ${r.buildingName}.`,
+    line: user.raidLine?.id === r.id ? user.raidLine.text : `The Dim's gathering over the ${r.buildingName}. 25 minutes of focus before then holds it off.`,
   };
 }
 

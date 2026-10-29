@@ -37,7 +37,7 @@ export async function syncRaidAlert(raid: RaidView | null) {
     await Notifications.scheduleNotificationAsync({
       content: {
         title: `A Dim raid is coming at ${raid.label}`,
-        body: `${raid.line.startsWith("A Dim raid") ? `It's heading for the ${raid.buildingName}.` : raid.line} 25 minutes of focus holds it off.`,
+        body: /focus/i.test(raid.line) ? raid.line : `${raid.line} 25 minutes of focus holds it off.`,
         data: { kind: KIND, url: `/focus?raid=${raid.id}` },
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: fire, channelId: "raids" },
