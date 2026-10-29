@@ -8,7 +8,7 @@ import { C, T } from "@/theme";
 
 const EMOJI: Record<string, string> = { drained: "🥱", focused: "🧐", happy: "😊", thriving: "🤩", stressed: "😵‍💫", celebrating: "🥳" };
 /** web routes in nudge actions → app routes */
-const route = (to: string) => to.startsWith("/goals/") ? { pathname: "/goal/[id]" as const, params: { id: to.slice(7) } } : to;
+const route = (to: string) => to as never;
 
 export default function Nudges() {
   const { state, refresh } = useStore();

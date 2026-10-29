@@ -21,11 +21,11 @@ import { Btn, Chip, Field, Header, Input, Progress, Row, Screen, Sheet, tap } fr
 import { C, F, T, shadow } from "@/theme";
 
 type Tab = "all" | ItemSource;
-const TABS: [Tab, string][] = [["all", "All"], ["level", "Level"], ["streak", "Streak"], ["light", "Shop"], ["real", "Real life"]];
+const TABS: [Tab, string][] = [["all", "All"], ["level", "Level"], ["play", "Play"], ["light", "Shop"], ["real", "Real life"]];
 const SECTION: Record<ItemSource, { title: string; sub: string }> = {
-  level: { title: "Unlocked by level", sub: "Every good habit gives XP. New levels unlock these." },
-  streak: { title: "Unlocked by streaks", sub: "Show up day after day. Your best streak counts." },
-  light: { title: "Light shop", sub: "Spend the Light your habits make." },
+  level: { title: "Unlocked by level", sub: "Every good choice gives XP. New kingdom levels unlock these." },
+  play: { title: "Unlocked by playing", sub: "Play your cards and hold off Dim raids. Each one counts." },
+  light: { title: "Light shop", sub: "Spend the Light your good choices make." },
   real: { title: "Real life", sub: "Bought something real? Snap a photo and Bulbu gets one too." },
 };
 /** items whose 3D version is already in Bulbu's model (real-life ones say so with `hold`) */
@@ -34,7 +34,7 @@ const in3d = (it: ItemState) => IN_3D.has(it.id) || !!it.hold;
 
 const stars = (n: number) => "★".repeat(n) + "☆".repeat(3 - n);
 const short = (it: ItemState) =>
-  it.source === "level" ? `Level ${it.need}` : it.source === "streak" ? `${it.need}-day streak` : it.source === "light" ? `${it.need}` : "Add it";
+  it.source === "level" ? `Level ${it.need}` : it.source === "play" ? `${it.need} plays` : it.source === "light" ? `${it.need}` : "Add it";
 const busyMine = (it: ItemState) => it.mine?.cutState === "cutting" || it.mine?.artState === "drawing";
 
 export default function InventoryScreen() {
@@ -51,7 +51,7 @@ export default function InventoryScreen() {
   // what the stage shows: the item you're looking at, on top of what Bulbu has on now
   const stageOutfit = item && item.source !== "real" ? item.outfit ?? null : state?.user.outfit ?? null;
   const stageGear = item?.source === "real" ? item : held;
-  const groups = useMemo(() => (["level", "streak", "light", "real"] as ItemSource[])
+  const groups = useMemo(() => (["level", "play", "light", "real"] as ItemSource[])
     .filter(s => tab === "all" || tab === s)
     .map(s => ({ s, items: (inv?.items ?? []).filter(i => i.source === s) })), [inv, tab]);
 
@@ -101,7 +101,7 @@ export default function InventoryScreen() {
               </Pressable>
             : <View pointerEvents="none" style={{ backgroundColor: "rgba(255,255,255,.9)", borderRadius: 14, paddingVertical: 7, paddingHorizontal: 12, alignItems: "flex-end" }}>
                 <Text style={{ fontFamily: F.bold, fontSize: 11, color: C.muted, letterSpacing: 0.6 }}>LEVEL {inv.level}</Text>
-                <Text style={{ fontFamily: F.heavy, fontSize: 13, color: C.ink }}>🔥 best {inv.bestStreak}d</Text>
+                <Text style={{ fontFamily: F.heavy, fontSize: 13, color: C.ink }}>🃏 {inv.plays} played</Text>
               </View>}
         </View>
       </View>
@@ -218,7 +218,7 @@ function ItemCard({ it, light, onPress }: { it: ItemState; light: number; onPres
             ? <Text style={{ fontFamily: F.bold, fontSize: 11.5, color: C.primary }}>+ Add it</Text>
             : <View style={{ width: "100%", gap: 3 }}>
                 <View style={{ height: 6, borderRadius: 3, backgroundColor: "#E6EAF7", overflow: "hidden" }}>
-                  <LinearGradient colors={it.source === "streak" ? ["#FFB547", "#FF6B3D"] : ["#7FD8FF", "#3D5BFF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ height: "100%", width: `${Math.max(6, it.progress * 100)}%` }} />
+                  <LinearGradient colors={it.source === "play" ? ["#FFB547", "#FF6B3D"] : ["#7FD8FF", "#3D5BFF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ height: "100%", width: `${Math.max(6, it.progress * 100)}%` }} />
                 </View>
                 <Text style={{ fontFamily: F.semibold, fontSize: 10.5, color: C.muted, textAlign: "center" }}>{short(it)}</Text>
               </View>}
@@ -255,7 +255,7 @@ function Art({ it, onRedraw, busy }: { it: ItemState; onRedraw: () => void; busy
 }
 
 function ItemDetail({ it, light, busy, onWear, onShow, onBuy, onUpgrade, onAdd, onRedraw, onRemove }: { it: ItemState; light: number; busy: boolean; onWear: () => void; onShow: () => void; onBuy: () => void; onUpgrade: () => void; onAdd: () => void; onRedraw: () => void; onRemove: () => void }) {
-  const kind = { level: "Level reward", streak: "Streak reward", light: "Shop item", real: "Real-life item" }[it.source];
+  const kind = { level: "Level reward", play: "Play reward", light: "Shop item", real: "Real-life item" }[it.source];
   const real = it.source === "real";
   return <>
     {real && it.mine?.photo ? <Art it={it} onRedraw={onRedraw} busy={busy} /> : (
@@ -294,9 +294,9 @@ function ItemDetail({ it, light, busy, onWear, onShow, onBuy, onUpgrade, onAdd, 
 
     {!it.owned && it.source === "light" &&
       <Btn title={light >= it.need ? `Buy · ${it.need} Light` : `Need ${it.need - light} more Light`} disabled={light < it.need} busy={busy} onPress={onBuy} />}
-    {!it.owned && (it.source === "level" || it.source === "streak") && <View style={{ gap: 6 }}>
+    {!it.owned && (it.source === "level" || it.source === "play") && <View style={{ gap: 6 }}>
       <Progress value={it.progress * 100} label={`${it.name} progress`} />
-      <Text style={T.small}>{it.source === "level" ? "Log good habits to earn XP. It unlocks by itself." : "Log something good every day. It unlocks by itself."}</Text>
+      <Text style={T.small}>{it.source === "level" ? "Good choices earn XP. It unlocks by itself as your kingdom grows." : "Play today's cards and hold off Dim raids. It unlocks by itself."}</Text>
     </View>}
     {!it.owned && real && <>
       {it.hold && <Text style={T.small}>Tap Bulbu and it shows this one off in 3D, in the same colour as yours.</Text>}

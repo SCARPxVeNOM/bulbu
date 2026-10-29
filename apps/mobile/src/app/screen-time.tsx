@@ -45,15 +45,15 @@ export default function ScreenTime() {
         <Card style={{ gap: 10 }}>
           <Text style={T.b}>{Platform.OS === "ios" ? "iPhone keeps per-app minutes private" : "Screen time comes from the phone"}</Text>
           <Text style={T.muted}>{Platform.OS === "ios" ? "Apple doesn't let apps read Screen Time numbers. Take a screenshot of Settings › Screen Time and Bulbu will read it (only distracting and productive apps are kept)." : "Open Bulbu on your Android phone to sync app usage, or upload a screenshot."}</Text>
-          <Btn icon="camera" title="Log a Screen Time screenshot" onPress={() => router.push("/log")} />
+          <Btn icon="camera" title="Show Bulbu a Screen Time screenshot" onPress={() => router.push("/tell" as never)} />
         </Card>
       )}
 
       {Platform.OS === "android" && !usageAvailable && (
         <Card style={{ gap: 10 }}>
           <Text style={T.b}>Needs the Bulbu app build</Text>
-          <Text style={T.muted}>Reading usage access is native Android code, which Expo Go doesn't include. Install Bulbu's own build (see the README), or log a Digital Wellbeing screenshot for now.</Text>
-          <Btn icon="camera" title="Log a screenshot instead" onPress={() => router.push("/log")} />
+          <Text style={T.muted}>Reading usage access is native Android code, which Expo Go doesn't include. Install Bulbu's own build (see the README), or show Bulbu a Digital Wellbeing screenshot for now.</Text>
+          <Btn icon="camera" title="Show Bulbu a screenshot instead" onPress={() => router.push("/tell" as never)} />
         </Card>
       )}
 

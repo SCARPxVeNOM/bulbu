@@ -23,17 +23,21 @@ test("good habits make Light and XP; scrolling makes none but shows as fog", () 
   assert.equal(worldState([goal], [act({ category: "social_media", minutes: 150, app: "Instagram" })], NEW_WORLD, NOW).fog, 1);
 });
 
-test("level items unlock with XP, streak items with streaks", () => {
+test("level items unlock with XP, play items by playing cards and holding off raids", () => {
   const hist = [act({ category: "study", minutes: 300 })];                     // 300 XP -> level 2
   const inv = inventory([goal], hist, NEW_WORLD, null, NOW);
   assert.equal(inv.level, 2);
   assert.ok(inv.items.find(i => i.id === "hoodie")!.owned);
   assert.ok(!inv.items.find(i => i.id === "grad")!.owned);
-  const streak = [0, 1, 2].map(d => act({ category: "read", minutes: 20, units: 10, at: daysAgo(d) }));
-  const inv2 = inventory([goal], streak, NEW_WORLD, null, NOW);
-  assert.ok(inv2.items.find(i => i.id === "fit")!.owned, "3-day streak unlocks FitBulbu");
+  const cards = [0, 1].map(d => act({ category: "read", minutes: 20, units: 10, at: daysAgo(d), source: "card" }));
+  const inv2 = inventory([goal], cards, { ...NEW_WORLD, raids: { "2026-10-01": { at: daysAgo(3), light: 150 } } }, null, NOW);
+  assert.equal(inv2.plays, 3);
+  assert.ok(inv2.items.find(i => i.id === "fit")!.owned, "two cards and a raid unlock FitBulbu");
   assert.ok(!inv2.items.find(i => i.id === "champ")!.owned);
-  assert.match(inv2.items.find(i => i.id === "champ")!.detail, /7-day streak · best so far 3 days/);
+  assert.match(inv2.items.find(i => i.id === "champ")!.detail, /Play 7 cards or hold off raids · 3 so far/);
+  // earned the old way (days in a row) stays earned
+  const days = [0, 1, 2].map(d => act({ category: "read", minutes: 20, units: 10, at: daysAgo(d) }));
+  assert.ok(inventory([goal], days, NEW_WORLD, null, NOW).items.find(i => i.id === "fit")!.owned);
 });
 
 test("the shop sells for Light, and anything owned levels up with Light", () => {

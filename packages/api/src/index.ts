@@ -40,6 +40,8 @@ export interface Snapshot {
   kingdom: KingdomState;
   /** the next Dim raid, or null until there's a pattern to predict it from */
   raid: RaidView | null;
+  /** how the kingdom's been played */
+  play: { cardsPlayed: number; raidsHeld: number; buildings: number };
   /** everything Bulbu can wear or carry, and how each is earned */
   inventory: Inventory;
   ai: { enabled: boolean; models: { spark: string; wonder: string } };

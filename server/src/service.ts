@@ -50,6 +50,8 @@ export function snapshot(userId: string, now = new Date()) {
     world: worldState(goals, acts, user.world ?? NEW_WORLD, now),
     kingdom: kingdom(goals, acts, now),
     raid: raidView(user, goals, acts, now),
+    // how the kingdom's been played (instead of streaks and badges)
+    play: { cardsPlayed: acts.filter(a => a.source === "card").length, raidsHeld: Object.keys(user.world?.raids ?? {}).length, buildings: kingdom(goals, acts, now).buildings.length },
     inventory: inventory(goals, acts, user.world ?? NEW_WORLD, user.outfit, now, user.gear ?? null),
     ai: { enabled: ai.enabled, models: ai.models }, now: now.toISOString(),
   };
@@ -385,11 +387,12 @@ const changeFrom = (a: WhatIfArgs): Change => ({ label: a.label, perWeek: a.per_
 // ------------------------------------------------------------------ chat
 
 function goalsSummary(userId: string, now: Date) {
-  const goals = store.goals(userId), acts = store.activities(userId), week = insights(goals, acts, now);
+  const goals = store.goals(userId), acts = store.activities(userId), week = insights(goals, acts, now), k = kingdom(goals, acts, now);
   return {
-    goals: goals.map(g => { const f = forecast(g, goals, acts, now); return { id: g.id, title: g.title, progress: `${Math.round(f.progress)} of ${g.target} ${g.unit}`, percent: Math.round(f.percent), pace_per_day: +f.pace.perDay.toFixed(2), goal_date: f.eta, days_left: Math.ceil(f.daysLeft) }; }),
+    // goals as the kingdom's buildings: the model talks about construction and finish dates, not scores
+    goals: goals.map(g => { const f = forecast(g, goals, acts, now), b = k.buildings.find(x => x.goalId === g.id); return { id: g.id, title: g.title, building: b?.name, building_level: b?.level, percent: Math.round(f.percent), pace_per_day: +f.pace.perDay.toFixed(2), construction_finishes: f.eta, days_left: Math.ceil(f.daysLeft) }; }),
     this_week: { productive: fmtMinutes(week.productiveMinutes), social_media: fmtMinutes(week.socialMinutes), net_impact: week.netDays < 0 ? `${fmtDays(week.netDays).slice(1)} closer` : `${fmtDays(week.netDays).replace("+", "")} later` },
-    streak_days: streak(acts, now),
+    kingdom: { cards_played: acts.filter(a => a.source === "card").length, raids_held_off: Object.keys(store.user(userId)?.world?.raids ?? {}).length },
   };
 }
 
@@ -479,9 +482,9 @@ async function chatOffline(user: User, text: string, now: Date, out: ChatOut) {
   }
   const best = [...s.goals].sort((a, b) => b.percent - a.percent)[0];
   out.reply = best
-    ? `You're ${best.percent}% of the way to ${best.title}, on pace for ${fmtDate(best.goal_date)}. This week's net impact is ${s.this_week.net_impact}. Consistency beats intensity!`
+    ? `The ${best.building ?? best.title} is at level ${best.building_level ?? 1}, and construction finishes ${fmtDate(best.construction_finishes)} at your pace. This week's choices moved it ${s.this_week.net_impact}. Small moves add up!`
     : "Tell me about your day, or ask “what if I…” and I'll run the numbers.";
-  out.bulbu = { emote: "happy", animation: "Idle", glow: 0.9, line: "Consistency beats intensity!", via: "engine" };
+  out.bulbu = { emote: "happy", animation: "Idle", glow: 0.9, line: "Small moves add up!", via: "engine" };
 }
 
 const fmtDate = (iso: string | null) => iso ? new Date(iso + "T12:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "—";
@@ -528,7 +531,7 @@ Return JSON: {"facts":[{"text":"...","confidence":0-1}] (new things about the us
 
 // ------------------------------------------------------------------ nudges
 
-export interface Nudge { id: string; kind: "usage" | "drift" | "streak" | "promise" | "milestone"; at: string; text: string; emote: Emote; action: { label: string; to: string } }
+export interface Nudge { id: string; kind: "usage" | "drift" | "card" | "promise" | "milestone"; at: string; text: string; emote: Emote; action: { label: string; to: string } }
 
 const QUIET = (d: Date) => { const m = d.getHours() * 60 + d.getMinutes(); return m >= 23 * 60 + 30 || m < 7 * 60; };
 
@@ -555,10 +558,11 @@ export function nudges(user: User, goals: Goal[], acts: Activity[], facts: Fact[
     out.push({ id: "drift-" + p.id, kind: "drift", at: at.toISOString(), emote: "focused", text, action: { label: "Start 25-min focus", to: "/focus" } });
   }
 
-  const s = streak(acts, now);
+  // an evening nudge toward a card still in today's hand, when nothing has moved a building yet today
   const doneToday = today.some(a => ["study", "code", "read", "workout", "focus", "save"].includes(a.category));
-  if (s >= 3 && !doneToday && now.getHours() >= 19)
-    out.push({ id: "streak", kind: "streak", at: iso, emote: "happy", text: `Your ${s}-day streak is waiting for one small step today.`, action: { label: "Log something", to: "/log" } });
+  const left = user.hand?.day === dayKey(now) ? user.hand.cards.filter(c => !user.hand!.played.includes(c.id)) : [];
+  if (left.length && !doneToday && now.getHours() >= 19)
+    out.push({ id: "card", kind: "card", at: iso, emote: "happy", text: `Your ${left[0].buildingName} card is still in your hand: ${left[0].title.toLowerCase()}. One small move, and it's closer.`, action: { label: "See your cards", to: "/home" } });
 
   for (const f of facts.filter(f => f.kind === "promise" && !f.done && f.checkAt && +new Date(f.checkAt) <= +now + 86400_000))
     out.push({ id: "promise-" + f.id, kind: "promise", at: f.checkAt!, emote: "happy", text: `Checking in: you said you'd “${f.text.toLowerCase()}”. How's it going?`, action: { label: "Chat with Bulbu", to: "/chat" } });

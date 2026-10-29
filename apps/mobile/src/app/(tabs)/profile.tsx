@@ -20,7 +20,6 @@ export default function Profile() {
   if (!state) return null;
   const s = state, u = s.user;
   const setUser = async (b: Parameters<typeof api.updateUser>[0]) => { try { await api.updateUser(b); refresh(); } catch (e) { toast((e as Error).message); } };
-  const earned = s.achievements.filter(a => a.earned).length;
   const leave = async () => { await signOut(); router.replace("/welcome"); };
   const wipe = async () => { await api.deleteUser(); await leave(); };
   const confirmWipe = () => Platform.OS === "web" ? wipe() : Alert.alert("Delete your profile?", "This deletes everything Bulbu remembers. It can't be undone.", [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: wipe }]);
@@ -44,7 +43,7 @@ export default function Profile() {
         </LinearGradient>
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={[T.b, { fontSize: 19 }]}>{u.name}</Text>
-          <Text style={T.small}>Level {s.world.level} · {s.streak} day streak · {s.inventory.light} Light</Text>
+          <Text style={T.small}>Kingdom level {s.world.level} · {s.play.buildings} {s.play.buildings === 1 ? "building" : "buildings"} · {s.inventory.light} Light</Text>
           <Progress value={(s.world.into / s.world.span) * 100} height={12} label="Level progress" />
           <Text style={T.tiny}>{s.world.span - s.world.into} XP to level {s.world.level + 1}</Text>
         </View>
@@ -78,8 +77,9 @@ export default function Profile() {
 
       {tab === "stats" && (
         <Card style={{ gap: 10 }}>
-          <Row gap={10}><Stat value={String(s.world.xp)} label="XP" /><Stat value={String(s.streak)} label="Day streak" /></Row>
-          <Row gap={10}><Stat value={fmtMinutes(s.week.productiveMinutes)} label="Productive this week" /><Stat value={`${earned}/${s.achievements.length}`} label="Badges" /></Row>
+          <Row gap={10}><Stat value={String(s.world.xp)} label="XP" /><Stat value={String(s.play.buildings)} label="Buildings" /></Row>
+          <Row gap={10}><Stat value={String(s.play.cardsPlayed)} label="Cards played" /><Stat value={String(s.play.raidsHeld)} label="Raids held off" /></Row>
+          <Row gap={10}><Stat value={fmtMinutes(s.week.productiveMinutes)} label="Focus this week" /><Stat value={String(s.inventory.items.filter(i => i.owned).length)} label="Things collected" /></Row>
           <Row style={{ marginTop: 6, alignItems: "flex-start" }}><Icon name="sparkles" size={18} color={C.primary} />
             <Text style={[T.small, { flex: 1 }]}>{s.ai.enabled ? `Muse Spark (${s.ai.models.spark}) and Muse Wonder (${s.ai.models.wonder}) connected` : "Offline mode: Bulbu understands text locally. Add a Meta Model API key on the server for screenshots, voice and coaching."}</Text></Row>
         </Card>
@@ -88,13 +88,12 @@ export default function Profile() {
       <Card style={{ paddingVertical: 4 }}>
         {[
           { to: "/inventory", icon: "trophy", color: "#F5A524", title: "Inventory", sub: `${s.inventory.items.filter(i => i.owned).length} things collected · wear and level up` },
-          { to: "/journal", icon: "chart", color: "#3D5BFF", title: "Journal", sub: "Your week, patterns and what Bulbu noticed" },
-          { to: "/screen-time", icon: "phone", color: "#141B4D", title: "Screen time", sub: Platform.OS === "android" ? "Let Bulbu read app usage" : "Log it from a Screen Time screenshot" },
+          { to: "/letter", icon: "sparkles", color: "#3D5BFF", title: "A letter from your future self", sub: "Muse Wonder writes it at night, from your month" },
+          { to: "/screen-time", icon: "phone", color: "#141B4D", title: "Screen time", sub: Platform.OS === "android" ? "Let Bulbu read app usage" : "Show Bulbu a Screen Time screenshot" },
           { to: "/memory", icon: "brain", color: "#7B5CFF", title: "What Bulbu remembers", sub: "See, edit or delete everything" },
-          { to: "tour", icon: "sparkles", color: "#F5A524", title: "Replay Bulbu's tour", sub: "Bulbu explains Bulbu World again" },
-          { to: "/achievements", icon: "trophy", color: "#F5A524", title: "Achievements", sub: `${earned} earned` },
-          { to: "/chat", icon: "sparkles", color: "#3D5BFF", title: "Chat with Bulbu" },
-          { to: "/focus", icon: "clock", color: "#18B37A", title: "Focus Mode" },
+          { to: "tour", icon: "sparkles", color: "#F5A524", title: "Replay Bulbu's tour", sub: "Bulbu shows you round the kingdom again" },
+          { to: "/chat", icon: "sparkles", color: "#3D5BFF", title: "Ask Bulbu before you choose", sub: "About to order biryani? Bulbu shows what it does first" },
+          { to: "/focus", icon: "clock", color: "#18B37A", title: "Defend mode", sub: "25 minutes of focus. Holds off Dim raids" },
         ].map((l, i, a) => (
           <Pressable key={l.to} accessibilityRole="link" onPress={async () => { tap(); if (l.to === "tour") { await api.tutorial(0); await refresh(); router.navigate("/home"); } else router.push(l.to as never); }}
                      style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 11, borderBottomWidth: i < a.length - 1 ? 1 : 0, borderColor: C.line }}>

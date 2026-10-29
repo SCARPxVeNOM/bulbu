@@ -1,5 +1,5 @@
 // The game bar over Bulbu: level + XP on the left, Light on the right (like a game's resource bar), then today's
-// Light, the streak, and a warning when today has more scrolling than good habits.
+// Light, the Dim raid warning, and a heads-up when today has more scrolling than good choices.
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -42,7 +42,6 @@ export function Hud({ world, name, nudges, extra }: { world: WorldState; name: s
       </View>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <View style={{ flexDirection: "row", gap: 8, flexShrink: 1, flexWrap: "wrap" }}>
-          <Chip text={`🔥 ${world.streak}-day streak`} tone="orange" />
           {world.earnedToday > 0 && <Chip text={`+${world.earnedToday} Light today`} />}
           {extra}
           {world.fog > 0.3 && <Chip text="Too much scrolling today" warn />}

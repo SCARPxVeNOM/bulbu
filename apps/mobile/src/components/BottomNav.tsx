@@ -66,7 +66,7 @@ export function BottomNav({ state, emitter, navigateToTab }: BottomTabBarProps) 
           );
         })}
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Log an activity" onPress={() => { tap(); router.push("/log"); }}
+      <Pressable accessibilityRole="button" accessibilityLabel="Tell Bulbu: a screenshot, a voice note or a sentence" onPress={() => { tap(); router.push("/tell" as never); }}
                  style={({ pressed }) => ({ position: "absolute", top: -24, alignSelf: "center", width: 64, height: 64, borderRadius: 32, transform: [{ scale: pressed ? 0.93 : 1 }],
                    shadowColor: "#2EB46E", shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: 10 }, elevation: 14 })}>
         <View style={{ flex: 1, borderRadius: 32, overflow: "hidden", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "rgba(255,255,255,.6)" }}>

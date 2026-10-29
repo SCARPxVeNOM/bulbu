@@ -2,7 +2,7 @@
 // reached, and the forecast says when construction finishes. Today's moves shift that date, and every number opens
 // its maths (the forecasting engine's, never a model's guess).
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { fmtDays, type WhatIf } from "@bulbu/engine";
@@ -26,7 +26,8 @@ const shortDate = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateStrin
 
 export default function BuildingPanel() {
   const { id } = useLocalSearchParams<{ id: BuildingId }>();
-  const { state, toast, hand, playCard } = useStore();
+  const { state, toast, hand, playCard, refresh } = useStore();
+  const [manage, setManage] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [r, setR] = useState<BuildingReport | null>(null);
   const [missing, setMissing] = useState<string | null>(null);
@@ -142,9 +143,24 @@ export default function BuildingPanel() {
 
       <Row gap={10}>
         <View style={{ flex: 1 }}><Btn kind="ghost" icon="sparkles" title="Ask Bulbu" onPress={() => router.push("/chat")} /></View>
-        <View style={{ flex: 1 }}><Btn kind="ghost" title="Goal settings" onPress={() => router.push(`/goal/${r.goalId}` as never)} /></View>
+        <View style={{ flex: 1 }}><Btn kind="ghost" title="Goal settings" onPress={() => setManage(true)} /></View>
       </Row>
 
+      {/* the goal behind the building: make it the Castle (the main goal), or take the building down */}
+      <Sheet open={manage} onClose={() => setManage(false)} title={`${r.name} · ${r.goalTitle}`}>
+        <View style={{ gap: 12 }}>
+          {r.id !== "Castle" && <Btn kind="ghost" icon="trophy" title="Make this my main goal (the Castle)" onPress={async () => {
+            try { await api.updateGoal(r.goalId, { primary: true }); setManage(false); await refresh(); toast(`${r.goalTitle} is your Castle now`); router.navigate("/home" as never); }
+            catch (e) { toast((e as Error).message); }
+          }} />}
+          <Text style={T.small}>{r.id === "Castle" ? "This is your main goal: the Castle, with its treasure on top. Time lost to the Dim counts against it." : "Your main goal is the Castle in the middle of the kingdom. Time lost to the Dim counts against it."}</Text>
+          <Btn kind="danger" icon="trash" title="Take this building down" onPress={() => {
+            const del = async () => { await api.deleteGoal(r.goalId); setManage(false); await refresh(); router.navigate("/home" as never); };
+            if (Platform.OS === "web") void del();
+            else Alert.alert(`Take down the ${r.name}?`, `This deletes the goal “${r.goalTitle}”. Everything you did stays in your history.`, [{ text: "Cancel", style: "cancel" }, { text: "Take it down", style: "destructive", onPress: () => void del() }]);
+          }} />
+        </View>
+      </Sheet>
       <Sheet open={!!why} onClose={() => setWhy(null)} title={why?.title ?? ""}>
         {why && <Breakdown steps={why.steps} note={why.note} />}
       </Sheet>

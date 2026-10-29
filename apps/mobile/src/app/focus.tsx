@@ -112,9 +112,9 @@ export default function Focus() {
           <Card tight><Text style={T.body}>{defended.message}</Text></Card>
         ))}
         {!defended && result?.impacts[0] && (
-          <Card tight onPress={() => router.push("/impact")}>
+          <Card tight onPress={() => router.navigate("/home" as never)}>
             <Row><Text style={{ fontSize: 24 }}>🎉</Text>
-              <View style={{ flex: 1 }}><Text style={T.body}><Text style={[T.b, { color: C.green }]}>{fmtDays(result.impacts[0].days).slice(1)} closer</Text> to {result.impacts[0].goalTitle}</Text><Text style={T.tiny}>Tap to see the math</Text></View>
+              <View style={{ flex: 1 }}><Text style={T.body}><Text style={[T.b, { color: C.green }]}>{fmtDays(result.impacts[0].days).slice(1)} closer</Text> to {result.impacts[0].goalTitle}</Text><Text style={T.tiny}>Back to the kingdom to watch it land</Text></View>
               <Icon name="right" /></Row>
           </Card>
         )}

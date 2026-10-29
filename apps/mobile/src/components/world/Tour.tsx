@@ -1,6 +1,6 @@
 // Bulbu's tour: the first time you open the app, Bulbu pops up (like a game's guide character) and explains how the
-// game works: Light, XP and levels, streaks, the shop, real-life items. It gives you starter Light. Saved on the
-// server, so it shows once; Me can replay it.
+// kingdom works: buildings and their finish dates, the Dim, cards, the what-if, raids. It gives you starter Light.
+// Saved on the server, so it shows once; Me can replay it.
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, Modal, Pressable, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -13,18 +13,19 @@ import { LightIcon } from "./LightIcon";
 type Step = { text: string; emote?: string; action?: "next" | "gift" | "finish"; button?: string };
 
 export function steps(name: string, level: number, light: number): Step[] {
+  // nine steps, the gift on the eighth (the server counts them)
   return [
-    { text: `Hi ${name}! I'm Bulbu. ✨ From today, I grow with you.`, emote: "happy" },
+    { text: `Hi ${name}! I'm Bulbu, and this is our kingdom. ✨ Your real choices build it.`, emote: "happy" },
     level > 0 && light > 0
-      ? { text: `Your habits have already made ${light.toLocaleString("en-IN")} Light, so you start at Level ${level}! Let me show you how this works.`, emote: "thriving" }
-      : { text: "We start at Level 0, with zero XP. Just me in my cosy sweater.", emote: "focused" },
-    { text: "Every good habit in your real life, like studying, working out, reading or saving, makes Light and XP for us.", emote: "thriving" },
-    { text: "XP raises our level. New levels unlock new outfits for me. Keep a streak going and special Bulbus unlock too!", emote: "celebrating" },
-    { text: "Light is what we spend: new things in the shop, and levelling up everything we own.", emote: "happy" },
-    { text: "And when you buy something real, like headphones or the phone you saved for, add it and I get one too. 🎧", emote: "focused" },
-    { text: "Scrolling makes no Light, and too much of it makes me sleepy. 😴 Good habits wake me right up.", emote: "drained" },
+      ? { text: `Your choices have already made ${light.toLocaleString("en-IN")} Light, so our kingdom starts at level ${level}! Let me show you round.`, emote: "thriving" }
+      : { text: "It's a quiet island for now. Just me in my cosy sweater, and a few empty plots.", emote: "focused" },
+    { text: "Every goal is a building: coding raises the Library, saving fills the Vault, workouts build the Arena. Your main goal is the Castle.", emote: "thriving" },
+    { text: "The label over each building says when construction finishes, at your pace. Tap it to see exactly why.", emote: "focused" },
+    { text: "Scrolling rolls the Dim over the buildings it slows. It never breaks anything, and a good move clears it fast. 🌫️", emote: "drained" },
+    { text: "I deal you three cards a day: small real-life moves. Do one, play it, and watch its building jump closer. 🃏", emote: "celebrating" },
+    { text: "Before you choose, ask \"What if…\" and turn the dial. The finish dates move before you've done a thing. 🔮", emote: "happy" },
     { text: "Here's 100 Light from me to get us going! 🎁", emote: "celebrating", action: "gift", button: "Take the Light" },
-    { text: "Tap ＋ whenever you do something good, and open the Inventory to dress me up. Let's grow together!", emote: "happy", action: "finish", button: "Let's go!" },
+    { text: "Tap ＋ to show me a screenshot or tell me about your day. If a Dim raid's coming, I'll warn you. Let's build!", emote: "happy", action: "finish", button: "Let's build!" },
   ];
 }
 

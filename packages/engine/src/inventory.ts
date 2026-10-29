@@ -9,7 +9,8 @@ import type { Activity, Goal } from "./types.ts";
 import { forecast } from "./forecast.ts";
 import { worldState, type RealItem, type WorldSave } from "./world.ts";
 
-export type ItemSource = "level" | "streak" | "light" | "real";
+/** level: your kingdom level · play: cards played and Dim raids held off · light: the shop · real: bought in real life */
+export type ItemSource = "level" | "play" | "light" | "real";
 
 export interface ItemDef {
   id: string;
@@ -41,11 +42,11 @@ export const ITEMS: ItemDef[] = [
   { id: "grad", name: "GradBulbu", tagline: "Celebrates learning milestones and motivates you to conquer your academic goals.", source: "level", need: 4, icon: "study", outfit: "grad" },
   { id: "tech", name: "TechBulbu", tagline: "Powers your coding sessions and cheers you toward your next breakthrough.", source: "level", need: 6, icon: "code", outfit: "tech" },
   { id: "dream", name: "DreamBulbu", tagline: "Represents your biggest ambitions and reminds you to keep reaching higher.", source: "level", need: 10, icon: "target", outfit: "dream" },
-  // ---- unlocked by streak
-  { id: "fit", name: "FitBulbu", tagline: "Keeps you moving, building healthy habits one workout at a time.", source: "streak", need: 3, icon: "workout", outfit: "fit" },
-  { id: "champ", name: "ChampBulbu", tagline: "Rewards consistency and celebrates the big wins along your journey.", source: "streak", need: 7, icon: "trophy", outfit: "champ" },
-  { id: "nature", name: "NatureBulbu", tagline: "Inspires balanced living, mindful choices, and steady personal growth.", source: "streak", need: 14, icon: "sun", outfit: "nature" },
-  { id: "party", name: "PartyBulbu", tagline: "Celebrates achievements, streaks, and every step worth being proud of.", source: "streak", need: 30, icon: "sparkles", outfit: "party" },
+  // ---- unlocked by playing: cards played and Dim raids held off
+  { id: "fit", name: "FitBulbu", tagline: "Keeps you moving, one real-life move at a time.", source: "play", need: 3, icon: "workout", outfit: "fit" },
+  { id: "champ", name: "ChampBulbu", tagline: "For a kingdom that keeps choosing well, and the big wins along the way.", source: "play", need: 7, icon: "trophy", outfit: "champ" },
+  { id: "nature", name: "NatureBulbu", tagline: "Inspires balanced living, mindful choices, and steady personal growth.", source: "play", need: 14, icon: "sun", outfit: "nature" },
+  { id: "party", name: "PartyBulbu", tagline: "Celebrates every raid held off and every step worth being proud of.", source: "play", need: 30, icon: "sparkles", outfit: "party" },
   // ---- the shop (Light)
   { id: "glasses", name: "Star Specs", tagline: "Round glasses with a little star on the side.", source: "light", need: 250, icon: "sun", outfit: null },
   { id: "cozy", name: "CozyBulbu", tagline: "Encourages reading, reflection, and peaceful, productive routines.", source: "light", need: 600, icon: "read", outfit: "cozy" },
@@ -86,6 +87,8 @@ export interface Inventory {
   light: number;
   level: number;
   bestStreak: number;
+  /** cards played and Dim raids held off: what unlocks the "play" outfits */
+  plays: number;
   equipped: string | null;
   /** the real-life item Bulbu is holding */
   gear: string | null;
@@ -98,12 +101,14 @@ const GOAL_ITEM: Record<string, string> = { iphone: "iphone" };
 export function inventory(goals: Goal[], history: Activity[], save: WorldSave, equipped: string | null, now: Date, gear: string | null = null): Inventory {
   const w = worldState(goals, history, save, now);
   const owned = save.owned ?? {}, real = save.real ?? [];
+  const plays = playsOf(history, save);
   const fromGoals = new Set(goals.filter(g => GOAL_ITEM[g.template] && forecast(g, goals, history, now).done).map(g => GOAL_ITEM[g.template]));
   const items = ITEMS.map((d): ItemState => {
     const r = real.find(x => x.item === d.id);
     let has = false, progress = 0, detail = "";
     if (d.source === "level") { has = w.level >= d.need; progress = d.need ? Math.min(1, w.xp / xpAt(d.need)) : 1; detail = has ? "Unlocked by your level" : `Reach level ${d.need} · you're level ${w.level}`; }
-    if (d.source === "streak") { has = w.bestStreak >= d.need; progress = Math.min(1, w.bestStreak / d.need); detail = has ? `Unlocked by a ${d.need}-day streak` : `Keep a ${d.need}-day streak · best so far ${w.bestStreak} ${w.bestStreak === 1 ? "day" : "days"}`; }
+    // anything already earned the old way (days in a row) stays yours
+    if (d.source === "play") { has = plays >= d.need || w.bestStreak >= d.need; progress = has ? 1 : Math.min(1, plays / d.need); detail = has ? `Unlocked by playing: ${d.need} cards and raids` : `Play ${d.need} cards or hold off raids · ${plays} so far`; }
     if (d.source === "light") {
       // shop items can also be pieced together from Dim raid loot
       const got = save.pieces?.[d.id] ?? 0, of = RAID_PIECES[d.id];
@@ -121,7 +126,7 @@ export function inventory(goals: Goal[], history: Activity[], save: WorldSave, e
       ...(r && (r.photo || r.name) && { mine: { name: r.name, color: r.color, engraving: r.engraving, price: r.price, photo: r.photo, cutout: r.cutout, cutState: r.cutState, art: r.art, artState: r.artState } }),
     };
   });
-  return { items, light: w.light, level: w.level, bestStreak: w.bestStreak, equipped, gear: gear && items.some(i => i.id === gear && i.owned) ? gear : null };
+  return { items, light: w.light, level: w.level, bestStreak: w.bestStreak, plays, equipped, gear: gear && items.some(i => i.id === gear && i.owned) ? gear : null };
 }
 const xpAt = (lvl: number) => 50 * lvl * (lvl + 1);
 
@@ -164,4 +169,9 @@ export const itemById = (id: string | null | undefined) => ITEMS.find(i => i.id 
 /** Update a real-life item's saved details (e.g. when Muse Image finishes drawing). */
 export function updateRealItem(save: WorldSave, item: string, patch: Partial<RealItem>): WorldSave {
   return { ...save, real: (save.real ?? []).map(r => r.item === item ? { ...r, ...patch } : r) };
+}
+
+/** Moves played in the kingdom: cards played (each one a move) and Dim raids held off. */
+export function playsOf(history: Activity[], save: WorldSave): number {
+  return history.filter(a => a.source === "card").length + Object.keys(save.raids ?? {}).length;
 }

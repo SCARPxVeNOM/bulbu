@@ -54,16 +54,13 @@ function Root() {
       </Stack.Protected>
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="log" options={{ animation: "slide_from_bottom" }} />
-        <Stack.Screen name="impact" options={{ animation: "fade" }} />
-        <Stack.Screen name="goal/[id]" />
+        <Stack.Screen name="tell" options={{ animation: "slide_from_bottom" }} />
         <Stack.Screen name="chat" />
         <Stack.Screen name="focus" options={{ animation: "fade" }} />
         <Stack.Screen name="memory" />
         <Stack.Screen name="nudges" />
-        <Stack.Screen name="achievements" />
         <Stack.Screen name="screen-time" />
-        <Stack.Screen name="journal" />
+        <Stack.Screen name="letter" />
         <Stack.Screen name="building/[id]" />
       </Stack.Protected>
     </Stack>
